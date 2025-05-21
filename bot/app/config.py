@@ -1,6 +1,8 @@
 import os
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
+from dotenv import load_dotenv
 
+load_dotenv()
 
 class Settings(BaseSettings):
     # Bot settings
@@ -15,7 +17,7 @@ class Settings(BaseSettings):
     ADMIN_USER_IDS: list = [int(id) for id in os.getenv("ADMIN_USER_IDS", "").split(",") if id]
 
     # Signal packages
-    DEFAULT_PACKAGES = [
+    DEFAULT_PACKAGES: list = [
         {"id": 1, "name": "Basic", "signals_count": 1, "price": 1.0},
         {"id": 2, "name": "Standard", "signals_count": 10, "price": 9.0},
         {"id": 3, "name": "Premium", "signals_count": 30, "price": 25.0}

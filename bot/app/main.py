@@ -9,9 +9,9 @@ import sys
 import uvicorn
 from fastapi import FastAPI
 
-from app.config import settings
-from app.handlers import start, balance, signals, support
-from app.internal_api import internal_app, set_bot_instance
+from config import settings
+from handlers import start, balance, signals, support
+from internal_api import internal_app, set_bot_instance
 
 # Configure logging
 logging.basicConfig(
@@ -42,6 +42,7 @@ async def main():
     global bot
 
     # Initialize Bot instance
+    print(settings.BOT_TOKEN)
     bot = Bot(token=settings.BOT_TOKEN)
 
     # Set bot instance for internal API

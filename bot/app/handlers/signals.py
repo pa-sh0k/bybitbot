@@ -1,3 +1,6 @@
+from typing import Dict, Any
+from datetime import datetime
+
 def format_entry_signal(signal: Dict[str, Any]) -> str:
     """Format entry signal message."""
     category_emoji = "🔍" if signal['category'] == 'SPOT' else "⚡"

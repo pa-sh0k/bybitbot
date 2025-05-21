@@ -5,8 +5,8 @@ import logging
 import aiohttp
 from datetime import datetime
 
-from app.config import settings
-from app.keyboards import (
+from config import settings
+from keyboards import (
     get_main_menu, get_balance_menu, get_deposit_amounts_keyboard,
     get_cancel_keyboard, get_back_keyboard
 )

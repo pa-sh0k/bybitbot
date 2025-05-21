@@ -5,8 +5,8 @@ import logging
 import aiohttp
 from datetime import datetime
 
-from app.config import settings
-from app.keyboards import get_main_menu, get_admin_menu
+from config import settings
+from keyboards import get_main_menu, get_admin_menu
 
 router = Router()
 logger = logging.getLogger(__name__)

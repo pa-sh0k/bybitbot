@@ -2,8 +2,8 @@ from aiogram import Router, F, types
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 import logging
-from app.config import settings
-from app.keyboards import get_support_keyboard, get_cancel_keyboard, get_back_keyboard, get_main_menu
+from config import settings
+from keyboards import get_support_keyboard, get_cancel_keyboard, get_back_keyboard, get_main_menu
 
 router = Router()
 logger = logging.getLogger(__name__)
