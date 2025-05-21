@@ -1,3 +1,5 @@
+# Modified section of signal_service.py
+
 import asyncio
 import logging
 from datetime import datetime
@@ -5,6 +7,7 @@ from decimal import Decimal
 from typing import Dict, Any, Optional
 import sys
 import os
+import threading
 
 # Add the api directory to Python path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -27,15 +30,46 @@ class BybitSignalService:
         self.tracker = BybitPositionTracker(self.client, self._handle_position_update)
         self.active_signals = {}  # Track open signals by position key
 
+        # Create a new event loop for async operations
+        self.loop = asyncio.new_event_loop()
+        self.thread = None
+
+    def _start_background_loop(self):
+        """Start the event loop in a background thread."""
+        asyncio.set_event_loop(self.loop)
+        self.loop.run_forever()
+
     def start(self, poll_interval: int = 5):
         """Start the signal service."""
         logger.info("Starting Bybit signal service...")
+
+        # Start the event loop in a background thread
+        self.thread = threading.Thread(target=self._start_background_loop, daemon=True)
+        self.thread.start()
+
+        # Start position tracking
         self.tracker.start_tracking(poll_interval)
 
     def stop(self):
         """Stop the signal service."""
         logger.info("Stopping Bybit signal service...")
         self.tracker.stop_tracking()
+
+        # Stop the event loop
+        if self.loop and self.loop.is_running():
+            self.loop.call_soon_threadsafe(self.loop.stop)
+
+        # Wait for thread to finish
+        if self.thread and self.thread.is_alive():
+            self.thread.join(timeout=5)
+
+    def _run_async(self, coro):
+        """Run a coroutine in the event loop."""
+        if self.loop and self.loop.is_running():
+            return asyncio.run_coroutine_threadsafe(coro, self.loop)
+        else:
+            logger.error("Event loop is not running, cannot execute async task")
+            return None
 
     def _handle_position_update(self, signal_data: Dict[str, Any]):
         """Handle position updates from the tracker."""
@@ -80,8 +114,8 @@ class BybitSignalService:
         position_key = f"{signal_data['category']}_{signal_data['symbol']}_{signal_data['side']}"
         self.active_signals[position_key] = signal.id
 
-        # Send signal to users
-        asyncio.create_task(self._notify_users_entry(signal))
+        # Send signal to users - use the event loop to run the async task
+        self._run_async(self._notify_users_entry(signal))
 
         logger.info(f"New signal created: {signal.signal_number} - {signal.symbol} {signal.signal_type}")
 
@@ -114,8 +148,8 @@ class BybitSignalService:
         )
         crud.create_position_update(db, update_create)
 
-        # Send partial close notification
-        asyncio.create_task(self._notify_users_partial_close(signal, signal_data["close_percentage"]))
+        # Send partial close notification - use the event loop
+        self._run_async(self._notify_users_partial_close(signal, signal_data["close_percentage"]))
 
         logger.info(f"Signal {signal.signal_number} partially closed: {signal_data['close_percentage']:.2f}%")
 
@@ -171,8 +205,8 @@ class BybitSignalService:
             # Remove from active signals
             del self.active_signals[position_key]
 
-            # Send close notification
-            asyncio.create_task(self._notify_users_exit(signal))
+            # Send close notification - use the event loop
+            self._run_async(self._notify_users_exit(signal))
 
             logger.info(f"Signal {signal.signal_number} fully closed: {profit_percentage:.2f}%")
         except Exception as e:
@@ -205,8 +239,8 @@ class BybitSignalService:
         )
         crud.create_position_update(db, update_create)
 
-        # Send increase notification
-        asyncio.create_task(self._notify_users_increase(signal))
+        # Send increase notification - use the event loop
+        self._run_async(self._notify_users_increase(signal))
 
         logger.info(f"Signal {signal.signal_number} position increased")
 
@@ -284,7 +318,7 @@ class BybitSignalService:
             user_ids = [user.id for user in users]
 
             if user_ids:
-                from app.bot_api import send_signal_to_users
+                from bot_api import send_signal_to_users
                 try:
                     await send_signal_to_users(signal.id, user_ids)
                 except Exception as e:
