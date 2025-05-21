@@ -1,33 +1,45 @@
 import os
-from pydantic_settings import BaseSettings
+from typing import List
 from dotenv import load_dotenv
 
 load_dotenv()
 
-class Settings(BaseSettings):
-    # Bot settings
-    BOT_TOKEN: str = os.getenv("BOT_TOKEN", "")
-    WEBHOOK_URL: str = os.getenv("WEBHOOK_URL", "")
-    WEBHOOK_PATH: str = os.getenv("WEBHOOK_PATH", "/webhook")
 
-    # API settings
-    API_URL: str = os.getenv("API_URL", "http://api:8000")
-
-    # Admin settings
-    ADMIN_USER_IDS: list = [int(id) for id in os.getenv("ADMIN_USER_IDS", "").split(",") if id]
-
-    # Signal packages
-    DEFAULT_PACKAGES: list = [
-        {"id": 1, "name": "Basic", "signals_count": 1, "price": 1.0},
-        {"id": 2, "name": "Standard", "signals_count": 10, "price": 9.0},
-        {"id": 3, "name": "Premium", "signals_count": 30, "price": 25.0}
-    ]
-
-    # Payment settings
-    PAYMENT_PROVIDER_TOKEN: str = os.getenv("PAYMENT_PROVIDER_TOKEN", "")
-
-    class Config:
-        env_file = ".env"
+# Simple function to parse admin IDs
+def parse_admin_ids() -> List[int]:
+    admin_ids = os.getenv("ADMIN_USER_IDS", "")
+    if not admin_ids:
+        return []
+    try:
+        return [int(id.strip()) for id in admin_ids.split(",") if id.strip()]
+    except ValueError:
+        return []
 
 
+# Create a simple class instead of using Pydantic
+class Settings:
+    def __init__(self):
+        # Bot settings
+        self.BOT_TOKEN = os.getenv("BOT_TOKEN", "")
+        self.WEBHOOK_URL = os.getenv("WEBHOOK_URL", "")
+        self.WEBHOOK_PATH = os.getenv("WEBHOOK_PATH", "/webhook")
+
+        # API settings
+        self.API_URL = os.getenv("API_URL", "http://api:8000")
+
+        # Admin settings
+        self.ADMIN_USER_IDS = parse_admin_ids()
+
+        # Signal packages
+        self.DEFAULT_PACKAGES = [
+            {"id": 1, "name": "Basic", "signals_count": 1, "price": 1.0},
+            {"id": 2, "name": "Standard", "signals_count": 10, "price": 9.0},
+            {"id": 3, "name": "Premium", "signals_count": 30, "price": 25.0}
+        ]
+
+        # Payment settings
+        self.PAYMENT_PROVIDER_TOKEN = os.getenv("PAYMENT_PROVIDER_TOKEN", "")
+
+
+# Create settings instance
 settings = Settings()
