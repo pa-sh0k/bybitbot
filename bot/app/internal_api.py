@@ -121,13 +121,16 @@ async def send_exit_signal(request: SendExitSignalRequest):
         # Fetch signal details from API
         async with aiohttp.ClientSession() as session:
             async with session.get(f"{settings.API_URL}/api/signals/{signal_id}") as response:
+                # ↑ THIS CALL WORKS (you have this endpoint)
                 if response.status != 200:
                     raise HTTPException(status_code=400, detail=f"Failed to fetch signal: {await response.text()}")
                 signal = await response.json()
 
+        # ⚠️ ANOTHER MISSING ENDPOINT CALL ⚠️
         # Get users who received the entry signal
         async with aiohttp.ClientSession() as session:
             async with session.get(f"{settings.API_URL}/api/signals/{signal_id}/users") as response:
+                # ↑ THIS ENDPOINT DOESN'T EXIST EITHER!
                 if response.status != 200:
                     raise HTTPException(status_code=400, detail=f"Failed to fetch users: {await response.text()}")
                 users = await response.json()

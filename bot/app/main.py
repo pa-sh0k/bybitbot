@@ -37,7 +37,8 @@ async def set_commands(bot: Bot):
     await bot.set_my_commands(commands, scope=BotCommandScopeDefault())
 
 
-# Main function for setting up the bot
+# In bot/app/main.py
+
 async def main():
     global bot
 
@@ -108,24 +109,13 @@ async def main():
             await internal_app(scope, receive, send)
 
             # Convert response
-            status = None
-            body = b""
-            headers = []
-
             for response in responses:
                 if response["type"] == "http.response.start":
                     status = response["status"]
-                    # FIX: Convert ASGI headers (list of byte tuples) to string tuples
-                    raw_headers = response.get("headers", [])
-                    headers = [(h[0].decode(), h[1].decode()) for h in raw_headers]
+                    headers = response.get("headers", [])
                 elif response["type"] == "http.response.body":
                     body = response.get("body", b"")
-
-            # Return response with proper status and headers
-            if status is not None:
-                return web.Response(body=body, status=status, headers=headers)
-            else:
-                return web.Response(body=b"", status=500)
+                    return web.Response(body=body, status=status, headers=headers)
 
         # Add internal API routes
         app.router.add_route("POST", "/internal/{path:.*}", fastapi_handler)
@@ -134,8 +124,18 @@ async def main():
         # Setup application
         setup_application(app, dp, bot=bot)
 
-        # Start web server
-        web.run_app(app, host="0.0.0.0", port=8001)
+        # Start web server - THIS IS THE PROBLEMATIC LINE
+        # web.run_app(app, host="0.0.0.0", port=8001)
+
+        # Use the async version instead:
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, '0.0.0.0', 8001)
+        await site.start()
+
+        # Keep the application running
+        while True:
+            await asyncio.sleep(3600)  # Sleep for an hour
     else:
         # For polling mode, run internal API in a separate task
         async def run_internal_api():
@@ -156,7 +156,6 @@ async def main():
             await dp.start_polling(bot)
         finally:
             internal_task.cancel()
-
 
 if __name__ == "__main__":
     asyncio.run(main())
