@@ -64,22 +64,23 @@ async def send_signal_to_users(request: SendSignalRequest):
                 signal = await response.json()
 
         # Format signal message based on action
-        if signal['action'] == 'open':
+        if signal['action'].lower() == 'open':
             signal_message = format_entry_signal(signal)
-        elif signal['action'] == 'partial_close':
+        elif signal['action'].lower() == 'partial_close':
             signal_message = format_partial_close_signal(signal)
-        elif signal['action'] == 'close':
+        elif signal['action'].lower() == 'close':
             signal_message = format_exit_signal(signal)
-        elif signal['action'] == 'increase':
+        elif signal['action'].lower() == 'increase':
             signal_message = format_increase_signal(signal)
         else:
             signal_message = format_entry_signal(signal)  # Default
-
+        logger.info(user_ids)
+        logger.info(signal)
         # Send signal to each user
         for user_id in user_ids:
             try:
                 # Record signal usage in API (only for entry signals)
-                if signal['action'] == 'open':
+                if signal['action'].lower() == 'open':
                     async with aiohttp.ClientSession() as session:
                         async with session.post(
                                 f"{settings.API_URL}/api/signals/{signal_id}/users/{user_id}"
