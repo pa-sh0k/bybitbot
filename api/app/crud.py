@@ -79,6 +79,7 @@ def create_signal(db: Session, signal: schemas.SignalCreate):
         symbol=signal.symbol,
         category=signal.category,
         signal_type=signal.signal_type,
+        action=signal.action,  # FIX: Add the missing action field
         position_size=signal.position_size,
         leverage=signal.leverage,
         entry_price=signal.entry_price,
