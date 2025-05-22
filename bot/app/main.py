@@ -37,8 +37,7 @@ async def set_commands(bot: Bot):
     await bot.set_my_commands(commands, scope=BotCommandScopeDefault())
 
 
-# In bot/app/main.py
-
+# Main function for setting up the bot
 async def main():
     global bot
 
@@ -86,7 +85,7 @@ async def main():
                 "type": "http",
                 "method": request.method,
                 "path": request.path_qs,
-                "headers": list(request.headers.items()),
+                "headers": [[k.encode(), v.encode()] for k, v in request.headers.items()],
                 "query_string": request.query_string.encode(),
             }
 
@@ -109,13 +108,24 @@ async def main():
             await internal_app(scope, receive, send)
 
             # Convert response
+            status = 200
+            headers = {}
+            body = b""
+
             for response in responses:
                 if response["type"] == "http.response.start":
                     status = response["status"]
-                    headers = response.get("headers", [])
+                    # Convert ASGI headers (list of byte tuples) to dict of strings
+                    asgi_headers = response.get("headers", [])
+                    headers = {
+                        key.decode() if isinstance(key, bytes) else key:
+                            value.decode() if isinstance(value, bytes) else value
+                        for key, value in asgi_headers
+                    }
                 elif response["type"] == "http.response.body":
                     body = response.get("body", b"")
-                    return web.Response(body=body, status=status, headers=headers)
+
+            return web.Response(body=body, status=status, headers=headers)
 
         # Add internal API routes
         app.router.add_route("POST", "/internal/{path:.*}", fastapi_handler)
@@ -156,6 +166,7 @@ async def main():
             await dp.start_polling(bot)
         finally:
             internal_task.cancel()
+
 
 if __name__ == "__main__":
     asyncio.run(main())
