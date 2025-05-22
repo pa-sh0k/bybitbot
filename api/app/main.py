@@ -65,7 +65,7 @@ async def lifespan(app: FastAPI):
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS users (
                     id SERIAL PRIMARY KEY,
-                    telegram_id BIGINT UNIQUE NOT NULL,
+                    telegram_id INTEGER UNIQUE NOT NULL,
                     username VARCHAR,
                     first_name VARCHAR,
                     last_name VARCHAR,
@@ -228,7 +228,68 @@ app.add_middleware(
 )
 
 
-# API endpoints for TG bot
+# ================ MISSING ENDPOINTS - ADDED FOR BOT FUNCTIONALITY ================
+
+@app.get("/api/signals/{signal_id}", response_model=schemas.Signal)
+def get_signal(signal_id: int, db: Session = Depends(get_db)):
+    """Get signal by ID - needed by bot internal API"""
+    signal = crud.get_signal(db, signal_id)
+    if not signal:
+        raise HTTPException(status_code=404, detail="Signal not found")
+    return signal
+
+
+@app.get("/api/signals/{signal_id}/users", response_model=List[schemas.User])
+def get_signal_users(signal_id: int, db: Session = Depends(get_db)):
+    """Get users who received a specific signal - needed by bot internal API"""
+    signal = crud.get_signal(db, signal_id)
+    if not signal:
+        raise HTTPException(status_code=404, detail="Signal not found")
+
+    users = crud.get_users_by_signal(db, signal_id)
+    return users
+
+
+@app.get("/api/users/by_id/{user_id}", response_model=schemas.User)
+def get_user_by_id(user_id: int, db: Session = Depends(get_db)):
+    """Get user by ID - needed by bot internal API"""
+    user = crud.get_user(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+
+@app.get("/api/users/active", response_model=List[schemas.User])
+def get_active_users(db: Session = Depends(get_db)):
+    """Get all active users - needed by bot internal API"""
+    users = crud.get_users_with_balance(db, min_balance=0)  # All active users regardless of balance
+    return [user for user in users if user.is_active]
+
+
+@app.post("/api/signals/{signal_id}/users/{user_id}")
+def record_signal_usage(signal_id: int, user_id: int, db: Session = Depends(get_db)):
+    """Record that a user received a signal - needed by bot internal API"""
+    # Check if signal exists
+    signal = crud.get_signal(db, signal_id)
+    if not signal:
+        raise HTTPException(status_code=404, detail="Signal not found")
+
+    # Check if user exists
+    user = crud.get_user(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Record signal usage
+    try:
+        user_signal = crud.create_user_signal(db, user_id, signal_id)
+        return {"success": True, "message": "Signal usage recorded"}
+    except Exception as e:
+        logger.error(f"Error recording signal usage: {e}")
+        raise HTTPException(status_code=500, detail="Failed to record signal usage")
+
+
+# ================ EXISTING ENDPOINTS ================
+
 @app.post("/api/users/", response_model=schemas.User)
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db_user = crud.get_user_by_telegram_id(db, telegram_id=user.telegram_id)
@@ -350,7 +411,7 @@ async def create_test_signal(
 
         # Send signal in background using bot_api
         if user_ids:
-            from app.bot_api import send_signal_to_users
+            from bot_api import send_signal_to_users
             if background_tasks:
                 background_tasks.add_task(
                     send_signal_to_users,
@@ -402,7 +463,7 @@ async def close_test_signal(
         crud.mark_signal_completed(db, signal_id)
 
         # Send close notification using bot_api
-        from app.bot_api import send_exit_signal_to_users
+        from bot_api import send_exit_signal_to_users
         if background_tasks:
             background_tasks.add_task(
                 send_exit_signal_to_users,

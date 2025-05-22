@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Optional, List
 from enum import Enum
 
-# Enums
+# Enums - Updated to match database enum values
 class SignalType(str, Enum):
     BUY = "BUY"
     SELL = "SELL"
@@ -20,13 +20,13 @@ class SignalAction(str, Enum):
     INCREASE = "INCREASE"
 
 class TransactionType(str, Enum):
-    DEPOSIT = "deposit"
-    SIGNAL_PURCHASE = "signal_purchase"
-    SIGNAL_USED = "signal_used"
+    DEPOSIT = "DEPOSIT"
+    SIGNAL_PURCHASE = "SIGNAL_PURCHASE"
+    SIGNAL_USED = "SIGNAL_USED"
 
 class UserRole(str, Enum):
-    USER = "user"
-    ADMIN = "admin"
+    USER = "USER"
+    ADMIN = "ADMIN"
 
 # User schemas
 class UserBase(BaseModel):
@@ -47,7 +47,7 @@ class User(UserBase):
     updated_at: Optional[datetime] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True  # Updated for Pydantic v2
 
 # Signal schemas
 class SignalBase(BaseModel):
@@ -56,10 +56,10 @@ class SignalBase(BaseModel):
     signal_type: SignalType
     action: SignalAction
     position_size: str
-    leverage: int = 1
+    leverage: str = "1"  # Changed to string to match database
 
 class SignalCreate(SignalBase):
-    entry_price: Optional[float] = None
+    entry_price: Optional[str] = None  # Changed to string to match database
     entry_time: datetime
 
 class SignalUpdate(BaseModel):
@@ -88,7 +88,7 @@ class Signal(SignalBase):
     created_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True  # Updated for Pydantic v2
 
 # Position update schemas
 class PositionUpdateCreate(BaseModel):
@@ -110,7 +110,7 @@ class PositionUpdate(BaseModel):
     created_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True  # Updated for Pydantic v2
 
 # Transaction schemas
 class TransactionBase(BaseModel):
@@ -127,7 +127,7 @@ class Transaction(TransactionBase):
     created_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True  # Updated for Pydantic v2
 
 # Package schemas
 class PackageBase(BaseModel):
@@ -145,7 +145,7 @@ class Package(PackageBase):
     updated_at: Optional[datetime] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True  # Updated for Pydantic v2
 
 # Webhook schemas
 class BybitWebhookEntry(BaseModel):
