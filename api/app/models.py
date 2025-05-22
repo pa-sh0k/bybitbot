@@ -45,6 +45,7 @@ class User(Base):
     first_name = Column(String, nullable=True)
     last_name = Column(String, nullable=True)
     balance = Column(Integer, default=0)  # Number of signals available
+    balance_usdt = Column(Integer, default=0)  # Number of USDT on the balance
     role = Column(Enum(UserRole), default=UserRole.USER)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
