@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Optional, List
 from enum import Enum
 
-# Enums - Updated to match database enum values
+# Enums
 class SignalType(str, Enum):
     BUY = "BUY"
     SELL = "SELL"
@@ -40,14 +40,15 @@ class UserCreate(UserBase):
 
 class User(UserBase):
     id: int
-    balance: int
+    usdt_balance: float
+    signals_balance: int
     role: UserRole
     is_active: bool
     created_at: datetime
     updated_at: Optional[datetime] = None
 
     class Config:
-        from_attributes = True  # Updated for Pydantic v2
+        orm_mode = True
 
 # Signal schemas
 class SignalBase(BaseModel):
@@ -56,10 +57,10 @@ class SignalBase(BaseModel):
     signal_type: SignalType
     action: SignalAction
     position_size: str
-    leverage: str = "1"  # Changed to string to match database
+    leverage: int = 1
 
 class SignalCreate(SignalBase):
-    entry_price: Optional[str] = None  # Changed to string to match database
+    entry_price: Optional[float] = None
     entry_time: datetime
 
 class SignalUpdate(BaseModel):
@@ -88,7 +89,7 @@ class Signal(SignalBase):
     created_at: datetime
 
     class Config:
-        from_attributes = True  # Updated for Pydantic v2
+        orm_mode = True
 
 # Position update schemas
 class PositionUpdateCreate(BaseModel):
@@ -110,7 +111,7 @@ class PositionUpdate(BaseModel):
     created_at: datetime
 
     class Config:
-        from_attributes = True  # Updated for Pydantic v2
+        orm_mode = True
 
 # Transaction schemas
 class TransactionBase(BaseModel):
@@ -127,7 +128,7 @@ class Transaction(TransactionBase):
     created_at: datetime
 
     class Config:
-        from_attributes = True  # Updated for Pydantic v2
+        orm_mode = True
 
 # Package schemas
 class PackageBase(BaseModel):
@@ -145,7 +146,15 @@ class Package(PackageBase):
     updated_at: Optional[datetime] = None
 
     class Config:
-        from_attributes = True  # Updated for Pydantic v2
+        orm_mode = True
+
+# Balance schemas
+class BalanceUpdate(BaseModel):
+    usdt_amount: Optional[float] = None
+    signals_amount: Optional[int] = None
+
+class PurchaseSignalsRequest(BaseModel):
+    package_id: int
 
 # Webhook schemas
 class BybitWebhookEntry(BaseModel):

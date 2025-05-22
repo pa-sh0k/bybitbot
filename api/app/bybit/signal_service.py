@@ -1,5 +1,3 @@
-# Modified section of signal_service.py
-
 import asyncio
 import logging
 from datetime import datetime
@@ -280,7 +278,8 @@ class BybitSignalService:
     async def _notify_users_entry(self, signal: models.Signal):
         """Notify users about new signal entry."""
         with SessionLocal() as db:
-            users = crud.get_users_with_balance(db)
+            # Use the new function name for signals balance
+            users = crud.get_users_with_signals_balance(db)
             user_ids = [user.id for user in users]
 
             if user_ids:

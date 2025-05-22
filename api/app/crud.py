@@ -2,7 +2,6 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, cast, Date
 from datetime import datetime, date
 from typing import List, Optional, Dict, Any
-
 import models, schemas
 
 
@@ -19,10 +18,11 @@ def get_users(db: Session, skip: int = 0, limit: int = 100):
     return db.query(models.User).offset(skip).limit(limit).all()
 
 
-def get_users_with_balance(db: Session, min_balance: int = 1):
+def get_users_with_signals_balance(db: Session, min_balance: int = 1):
+    """Get users with signals balance >= min_balance"""
     return db.query(models.User).filter(
         models.User.is_active == True,
-        models.User.balance >= min_balance
+        models.User.signals_balance >= min_balance
     ).all()
 
 
@@ -31,7 +31,9 @@ def create_user(db: Session, user: schemas.UserCreate):
         telegram_id=user.telegram_id,
         username=user.username,
         first_name=user.first_name,
-        last_name=user.last_name
+        last_name=user.last_name,
+        usdt_balance=0.0,
+        signals_balance=0
     )
     db.add(db_user)
     db.commit()
@@ -39,13 +41,62 @@ def create_user(db: Session, user: schemas.UserCreate):
     return db_user
 
 
-def update_user_balance(db: Session, user_id: int, amount: int):
+def update_usdt_balance(db: Session, user_id: int, amount: float):
+    """Update user's USDT balance"""
     db_user = get_user(db, user_id)
     if db_user:
-        db_user.balance += amount
+        db_user.usdt_balance += amount
         db.commit()
         db.refresh(db_user)
     return db_user
+
+
+def update_signals_balance(db: Session, user_id: int, amount: int):
+    """Update user's signals balance"""
+    db_user = get_user(db, user_id)
+    if db_user:
+        db_user.signals_balance += amount
+        db.commit()
+        db.refresh(db_user)
+    return db_user
+
+
+def purchase_signals_with_usdt(db: Session, user_id: int, package_id: int):
+    """Purchase signals using USDT balance"""
+    db_user = get_user(db, user_id)
+    if not db_user:
+        return {"success": False, "error": "User not found"}
+
+    db_package = get_package(db, package_id)
+    if not db_package:
+        return {"success": False, "error": "Package not found"}
+
+    if db_user.usdt_balance < db_package.price:
+        return {"success": False, "error": "Insufficient USDT balance"}
+
+    # Deduct USDT and add signals
+    db_user.usdt_balance -= db_package.price
+    db_user.signals_balance += db_package.signals_count
+
+    db.commit()
+    db.refresh(db_user)
+
+    # Record transaction
+    transaction = schemas.TransactionCreate(
+        user_id=user_id,
+        amount=db_package.price,
+        transaction_type=schemas.TransactionType.SIGNAL_PURCHASE,
+        details=f"Purchased {db_package.signals_count} signals for {db_package.price} USDT"
+    )
+    create_transaction(db, transaction)
+
+    return {
+        "success": True,
+        "usdt_balance": db_user.usdt_balance,
+        "signals_balance": db_user.signals_balance,
+        "package": db_package.name,
+        "signals_added": db_package.signals_count
+    }
 
 
 # Signal operations
@@ -226,8 +277,8 @@ def create_user_signal(db: Session, user_id: int, signal_id: int):
     db.commit()
     db.refresh(db_user_signal)
 
-    # Deduct one signal from user's balance
-    update_user_balance(db, user_id, -1)
+    # Deduct one signal from user's signals balance
+    update_signals_balance(db, user_id, -1)
 
     # Record transaction
     transaction = schemas.TransactionCreate(

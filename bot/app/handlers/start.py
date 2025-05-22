@@ -46,7 +46,7 @@ async def get_user(telegram_id: int):
 async def cmd_start(message: types.Message, state: FSMContext):
     await state.clear()
 
-    print("STARTED")
+    # Get or create user
     user_data = await get_user(message.from_user.id)
     if not user_data:
         user_data = await register_user(message.from_user)
@@ -59,18 +59,40 @@ async def cmd_start(message: types.Message, state: FSMContext):
     # Check if user is admin
     is_admin = message.from_user.id in settings.ADMIN_USER_IDS
 
-    # Welcome message
+    # Welcome message with both balances
     welcome_text = (
         f"👋 Добро пожаловать, {message.from_user.first_name}!\n\n"
         f"Это бот для получения торговых сигналов с Bybit.\n\n"
-        f"💰 Ваш баланс: {user_data['balance']} сигналов\n\n"
+        f"💼 <b>Ваш баланс:</b>\n"
+        f"💰 USDT: {user_data['usdt_balance']:.2f}\n"
+        f"🎯 Сигналы: {user_data['signals_balance']} шт.\n\n"
         f"Используйте меню ниже для навигации:"
     )
 
     # Choose keyboard based on user role
     keyboard = get_admin_menu() if is_admin else get_main_menu()
 
-    await message.answer(welcome_text, reply_markup=keyboard)
+    await message.answer(welcome_text, reply_markup=keyboard, parse_mode="HTML")
+
+
+@router.message(Command("balance"))
+async def cmd_balance(message: types.Message):
+    # Get user data
+    user_data = await get_user(message.from_user.id)
+    if not user_data:
+        await message.answer(
+            "❌ Ошибка при получении данных. Пожалуйста, попробуйте позже или обратитесь в поддержку."
+        )
+        return
+
+    # Show both USDT and signals balance
+    balance_text = (
+        f"💼 <b>Ваш баланс:</b>\n\n"
+        f"💰 <b>USDT:</b> {user_data['usdt_balance']:.2f}\n"
+        f"🎯 <b>Сигналы:</b> {user_data['signals_balance']} шт."
+    )
+
+    await message.answer(balance_text, parse_mode="HTML")
 
 
 @router.message(Command("admin"))

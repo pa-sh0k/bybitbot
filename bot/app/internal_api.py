@@ -63,6 +63,9 @@ async def send_signal_to_users(request: SendSignalRequest):
                     raise HTTPException(status_code=400, detail=f"Failed to fetch signal: {await response.text()}")
                 signal = await response.json()
 
+        logger.info(user_ids)
+        logger.info(signal)
+
         # Format signal message based on action
         if signal['action'].lower() == 'open':
             signal_message = format_entry_signal(signal)
@@ -74,8 +77,6 @@ async def send_signal_to_users(request: SendSignalRequest):
             signal_message = format_increase_signal(signal)
         else:
             signal_message = format_entry_signal(signal)  # Default
-        logger.info(user_ids)
-        logger.info(signal)
         # Send signal to each user
         for user_id in user_ids:
             try:
