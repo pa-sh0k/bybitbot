@@ -46,7 +46,7 @@ async def get_user(telegram_id: int):
 async def cmd_start(message: types.Message, state: FSMContext):
     await state.clear()
 
-    # Get or create user
+    print("STARTED")
     user_data = await get_user(message.from_user.id)
     if not user_data:
         user_data = await register_user(message.from_user)

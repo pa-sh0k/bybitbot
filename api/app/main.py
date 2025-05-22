@@ -65,7 +65,7 @@ async def lifespan(app: FastAPI):
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS users (
                     id SERIAL PRIMARY KEY,
-                    telegram_id INTEGER UNIQUE NOT NULL,
+                    telegram_id BIGINT UNIQUE NOT NULL,
                     username VARCHAR,
                     first_name VARCHAR,
                     last_name VARCHAR,

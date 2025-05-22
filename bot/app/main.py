@@ -37,12 +37,12 @@ async def set_commands(bot: Bot):
     await bot.set_my_commands(commands, scope=BotCommandScopeDefault())
 
 
-# Main function for setting up the bot
+# In bot/app/main.py
+
 async def main():
     global bot
 
     # Initialize Bot instance
-    print(settings.BOT_TOKEN)
     bot = Bot(token=settings.BOT_TOKEN)
 
     # Set bot instance for internal API
@@ -124,8 +124,18 @@ async def main():
         # Setup application
         setup_application(app, dp, bot=bot)
 
-        # Start web server
-        web.run_app(app, host="0.0.0.0", port=8001)
+        # Start web server - THIS IS THE PROBLEMATIC LINE
+        # web.run_app(app, host="0.0.0.0", port=8001)
+
+        # Use the async version instead:
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, '0.0.0.0', 8001)
+        await site.start()
+
+        # Keep the application running
+        while True:
+            await asyncio.sleep(3600)  # Sleep for an hour
     else:
         # For polling mode, run internal API in a separate task
         async def run_internal_api():
@@ -146,7 +156,6 @@ async def main():
             await dp.start_polling(bot)
         finally:
             internal_task.cancel()
-
 
 if __name__ == "__main__":
     asyncio.run(main())
