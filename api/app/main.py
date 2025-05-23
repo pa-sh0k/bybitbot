@@ -318,7 +318,7 @@ def get_active_users(db: Session = Depends(get_db)):
     return [{"id": user.id, "telegram_id": user.telegram_id} for user in users]
 
 
-@app.get("/api/daily_summary/{date}")
+@app.get("/api/daily_summary/{date_str}")
 def get_daily_summary(date_str: str, db: Session = Depends(get_db)):
     # Calculate today's date in UTC+3
     utc_plus_3_offset = 3 * 60 * 60  # 3 hours in seconds
