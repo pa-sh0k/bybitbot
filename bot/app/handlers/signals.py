@@ -1,11 +1,11 @@
+from keyboards import get_main_menu, get_packages_keyboard, get_back_keyboard
 from aiogram import Router, F, types
-from aiogram.fsm.context import FSMContext
 import logging
 import aiohttp
-from datetime import datetime
-from typing import List, Dict, Any
+from datetime import datetime, date, timedelta
+from typing import Dict, List, Any
 from config import settings
-from keyboards import get_main_menu, get_packages_keyboard, get_back_keyboard
+
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -94,27 +94,103 @@ async def package_callback(callback: types.CallbackQuery):
     await callback.answer()
 
 
-# Handler for receiving signals
+async def get_daily_summary(date_str: str) -> Dict[str, Any]:
+    """Get daily summary from API."""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"{settings.API_URL}/api/daily_summary/{date_str}") as response:
+                if response.status == 200:
+                    return await response.json()
+                return None
+    except Exception as e:
+        logger.error(f"Error getting daily summary: {e}")
+        return None
+
+
+# Helper function to get signals in date range
+async def get_signals_in_range(start_date: date, end_date: date) -> List[Dict[str, Any]]:
+    """Get all signals in a date range by fetching daily summaries."""
+    all_signals = []
+    current_date = start_date
+
+    while current_date <= end_date:
+        date_str = current_date.strftime("%Y-%m-%d")
+        daily_summary = await get_daily_summary(date_str)
+
+        if daily_summary and daily_summary.get('signals'):
+            all_signals.extend(daily_summary['signals'])
+
+        current_date += timedelta(days=1)
+
+    return all_signals
+
+
+# Helper function to calculate statistics from signals
+def calculate_stats(signals: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Calculate statistics from a list of signals."""
+    if not signals:
+        return {
+            'total_signals': 0,
+            'successful_signals': 0,
+            'total_profit': 0.0,
+            'average_profit': 0.0,
+            'success_rate': 0.0
+        }
+
+    total_signals = len(signals)
+    successful_signals = sum(1 for signal in signals if signal.get('profit_percentage', 0) > 0)
+    total_profit = sum(signal.get('profit_percentage', 0) for signal in signals)
+    average_profit = total_profit / total_signals if total_signals > 0 else 0
+    success_rate = (successful_signals / total_signals * 100) if total_signals > 0 else 0
+
+    return {
+        'total_signals': total_signals,
+        'successful_signals': successful_signals,
+        'total_profit': total_profit,
+        'average_profit': average_profit,
+        'success_rate': success_rate
+    }
+
+
 @router.message(F.text == "📊 Статистика")
 async def show_statistics(message: types.Message):
-    # Here you would fetch statistics from API
-    # For demonstration, we'll show a simulated response
+    """Show actual trading statistics fetched from the API."""
 
-    stats_text = (
-        "📊 Статистика торговых сигналов:\n\n"
-        "За сегодня:\n"
-        "Сделка №00001: +10.5%\n"
-        "Сделка №00002: +7.6%\n\n"
-        "Общая прибыль: +18.1%\n\n"
-        "За неделю:\n"
-        "Успешных сделок: 12/15\n"
-        "Средняя прибыль: +8.7%\n\n"
-        "За месяц:\n"
-        "Успешных сделок: 42/50\n"
-        "Средняя прибыль: +12.3%"
-    )
+    # Send a "loading" message
+    loading_msg = await message.answer("📈 Загружаю статистику...")
 
-    await message.answer(stats_text)
+    try:
+        # Get current date
+        today = date.today()
+
+        # Get today's stats
+        today_str = today.strftime("%Y-%m-%d")
+        today_summary = await get_daily_summary(today_str)
+
+        # Format today's section
+        today_text = "📅 <b>За сегодня:</b>\n"
+        if today_summary and today_summary.get('signals'):
+            for signal in today_summary['signals']:
+                profit = signal.get('profit_percentage', 0)
+                profit_str = f"+{profit:.1f}%" if profit > 0 else f"{profit:.1f}%"
+                profit_emoji = "🟢" if profit > 0 else "🔴"
+                today_text += f"Сделка №{signal['signal_number']:05d}: {profit_emoji} {profit_str}\n"
+
+            total_profit = today_summary.get('total_profit', 0)
+            total_profit_str = f"+{total_profit:.1f}%" if total_profit > 0 else f"{total_profit:.1f}%"
+            today_text += f"\n<b>Общая прибыль:</b> {total_profit_str}\n"
+        else:
+            today_text += "Сигналов пока не было\n"
+
+        await loading_msg.edit_text(today_text, parse_mode="HTML")
+
+    except Exception as e:
+        logger.error(f"Error showing statistics: {e}")
+        await loading_msg.edit_text(
+            "❌ Произошла ошибка при загрузке статистики.\n"
+            "Пожалуйста, попробуйте позже или обратитесь в поддержку."
+        )
+
 
 
 # Internal endpoint for sending signals to users
