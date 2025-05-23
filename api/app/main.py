@@ -7,7 +7,7 @@ import os
 import logging
 import asyncio
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from contextlib import asynccontextmanager
 
 # Import models, schemas, and database
@@ -320,12 +320,13 @@ def get_active_users(db: Session = Depends(get_db)):
 
 @app.get("/api/daily_summary/{date}")
 def get_daily_summary(date_str: str, db: Session = Depends(get_db)):
-    try:
-        date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+    # Calculate today's date in UTC+3
+    utc_plus_3_offset = 3 * 60 * 60  # 3 hours in seconds
+    now_utc = datetime.utcnow()
+    now_utc3 = now_utc + timedelta(seconds=utc_plus_3_offset)
+    today_utc3 = now_utc3.date()
 
-    summary = crud.get_daily_summary(db, date_obj)
+    summary = crud.get_daily_summary(db, today_utc3)
     return summary
 
 
