@@ -17,6 +17,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - bybit_app
 
   api:
     build: ./api
@@ -32,8 +34,10 @@ services:
       - PG_PORT=5433
       - PG_DATABASE=${DB_NAME}
     volumes:
-      - ./api:/app
+      - ./api:/api
     restart: always
+    networks:
+      - bybit_app
 
   bot:
     build: ./bot
@@ -48,8 +52,10 @@ services:
       - ADMIN_USER_IDS=${ADMIN_USER_IDS}
       - PAYMENT_PROVIDER_TOKEN=${PAYMENT_PROVIDER_TOKEN}
     volumes:
-      - ./bot:/app
+      - ./bot:/bot
     restart: always
+    networks:
+      - bybit_app
 
   nginx:
     build: ./nginx
@@ -59,6 +65,8 @@ services:
       - api
       - bot
     restart: always
-
-volumes:
-  postgres_data:
+    networks:
+      - bybit_app
+networks:
+  bybit_app:
+    driver: bridge
