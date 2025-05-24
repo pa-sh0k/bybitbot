@@ -33,169 +33,10 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing database...")
 
     try:
-        # First, create the enum types if they don't exist
-        with engine.begin() as conn:
-            # Create enum types
-            enum_types = [
-                ("signaltype", "('BUY', 'SELL')"),
-                ("signalcategory", "('SPOT', 'LINEAR', 'INVERSE')"),
-                ("signalaction", "('OPEN', 'PARTIAL_CLOSE', 'CLOSE', 'INCREASE')"),
-                ("userrole", "('USER', 'ADMIN')"),
-                ("transactiontype", "('USDT_DEPOSIT', 'SIGNAL_PURCHASE', 'SIGNAL_USED')")
-            ]
-
-            for enum_name, enum_values in enum_types:
-                try:
-                    conn.execute(text(f"""
-                        DO $$
-                        BEGIN
-                            IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = '{enum_name}') THEN
-                                CREATE TYPE {enum_name} AS ENUM {enum_values};
-                            END IF;
-                        END
-                        $$;
-                    """))
-                    logger.info(f"Checked/created enum type: {enum_name}")
-                except Exception as e:
-                    logger.error(f"Error creating enum type {enum_name}: {e}")
-
-        # Create tables one by one in the correct order
-        with engine.begin() as conn:
-            # 1. Create users table with new balance structure
-            conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS users (
-                    id SERIAL PRIMARY KEY,
-                    telegram_id INTEGER UNIQUE NOT NULL,
-                    username VARCHAR,
-                    first_name VARCHAR,
-                    last_name VARCHAR,
-                    usdt_balance FLOAT NOT NULL DEFAULT 0.0,
-                    signals_balance INTEGER NOT NULL DEFAULT 0,
-                    role userrole NOT NULL DEFAULT 'USER',
-                    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-                    updated_at TIMESTAMP WITH TIME ZONE
-                );
-            """))
-
-            # Add columns if they don't exist (migration support)
-            try:
-                conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS usdt_balance FLOAT DEFAULT 0.0;"))
-                conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS signals_balance INTEGER DEFAULT 0;"))
-                # Rename old balance column if it exists
-                conn.execute(text("ALTER TABLE users RENAME COLUMN balance TO signals_balance;"))
-            except:
-                pass  # Columns might already exist
-
-            logger.info("Created/updated users table")
-
-            # 2. Create signals table
-            conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS signals (
-                    id SERIAL PRIMARY KEY,
-                    signal_number INTEGER NOT NULL,
-                    symbol VARCHAR NOT NULL,
-                    category signalcategory NOT NULL,
-                    signal_type signaltype NOT NULL,
-                    action signalaction,
-                    position_size VARCHAR NOT NULL,
-                    old_position_size VARCHAR,
-                    entry_price VARCHAR,
-                    exit_price VARCHAR,
-                    leverage VARCHAR NOT NULL DEFAULT '1',
-                    close_percentage FLOAT,
-                    realized_pnl VARCHAR,
-                    unrealized_pnl VARCHAR,
-                    profit_percentage FLOAT,
-                    entry_time TIMESTAMP WITH TIME ZONE NOT NULL,
-                    exit_time TIMESTAMP WITH TIME ZONE,
-                    is_completed BOOLEAN NOT NULL DEFAULT FALSE,
-                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-                );
-                CREATE INDEX IF NOT EXISTS idx_signals_signal_number ON signals (signal_number);
-                CREATE INDEX IF NOT EXISTS idx_signals_symbol ON signals (symbol);
-            """))
-            logger.info("Created signals table")
-
-            # 3. Create user_signals table
-            conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS user_signals (
-                    id SERIAL PRIMARY KEY,
-                    user_id INTEGER REFERENCES users(id),
-                    signal_id INTEGER REFERENCES signals(id),
-                    received_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-                );
-            """))
-            logger.info("Created user_signals table")
-
-            # 4. Create position_updates table
-            conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS position_updates (
-                    id SERIAL PRIMARY KEY,
-                    signal_id INTEGER REFERENCES signals(id),
-                    action signalaction NOT NULL,
-                    position_size VARCHAR NOT NULL,
-                    price VARCHAR,
-                    close_percentage FLOAT,
-                    realized_pnl VARCHAR,
-                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-                );
-            """))
-            logger.info("Created position_updates table")
-
-            # 5. Create transactions table
-            conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS transactions (
-                    id SERIAL PRIMARY KEY,
-                    user_id INTEGER REFERENCES users(id),
-                    amount FLOAT NOT NULL,
-                    transaction_type transactiontype NOT NULL,
-                    details VARCHAR,
-                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-                );
-            """))
-            logger.info("Created transactions table")
-
-            # 6. Create packages table
-            conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS packages (
-                    id SERIAL PRIMARY KEY,
-                    name VARCHAR NOT NULL,
-                    signals_count INTEGER NOT NULL,
-                    price FLOAT NOT NULL,
-                    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-                    updated_at TIMESTAMP WITH TIME ZONE
-                );
-            """))
-            logger.info("Created packages table")
-
-        # Verify tables were created
-        inspector = inspect(engine)
-        existing_tables = inspector.get_table_names()
-        logger.info(f"Tables in database: {sorted(existing_tables)}")
-
-        # Create default packages if they don't exist
-        try:
-            with SessionLocal() as db:
-                # Check if packages already exist
-                if db.query(models.Package).count() == 0:
-                    # Default packages
-                    packages = [
-                        models.Package(name="Basic", signals_count=1, price=1.0, is_active=True),
-                        models.Package(name="Standard", signals_count=10, price=9.0, is_active=True),
-                        models.Package(name="Premium", signals_count=30, price=25.0, is_active=True),
-                        models.Package(name="VIP", signals_count=100, price=75.0, is_active=True)
-                    ]
-
-                    # Add packages to database
-                    for package in packages:
-                        db.add(package)
-
-                    db.commit()
-                    logger.info(f"Created default packages")
-        except Exception as e:
-            logger.error(f"Error creating default packages: {e}")
+        # Create enum types and tables in separate transactions
+        await create_enum_types()
+        await create_tables()
+        await create_default_packages()
     except Exception as e:
         logger.error(f"Error during database initialization: {e}", exc_info=True)
         logger.warning("Continuing startup despite database initialization error")
@@ -226,6 +67,173 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.error(f"Error stopping Bybit signal service: {e}", exc_info=True)
 
+
+async def create_enum_types():
+    """Create enum types if they don't exist."""
+    try:
+        with engine.begin() as conn:
+            enum_types = [
+                ("signaltype", "('BUY', 'SELL')"),
+                ("signalcategory", "('SPOT', 'LINEAR', 'INVERSE')"),
+                ("signalaction", "('OPEN', 'PARTIAL_CLOSE', 'CLOSE', 'INCREASE')"),
+                ("userrole", "('USER', 'ADMIN')"),
+                ("transactiontype", "('DEPOSIT', 'SIGNAL_PURCHASE', 'SIGNAL_USED')")
+            ]
+
+            for enum_name, enum_values in enum_types:
+                try:
+                    conn.execute(text(f"""
+                        DO $$
+                        BEGIN
+                            IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = '{enum_name}') THEN
+                                CREATE TYPE {enum_name} AS ENUM {enum_values};
+                            END IF;
+                        END
+                        $$;
+                    """))
+                    logger.info(f"Checked/created enum type: {enum_name}")
+                except Exception as e:
+                    logger.error(f"Error creating enum type {enum_name}: {e}")
+    except Exception as e:
+        logger.error(f"Error creating enum types: {e}")
+        raise
+
+
+async def create_tables():
+    """Create tables if they don't exist."""
+    try:
+        with engine.begin() as conn:
+            # Check if users table exists and has correct schema
+            result = conn.execute(text("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'users' AND table_schema = 'public'
+            """))
+            existing_columns = [row[0] for row in result]
+
+            if 'users' not in [table.name for table in Base.metadata.tables.values()] or not existing_columns:
+                # Create users table
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS users (
+                        id SERIAL PRIMARY KEY,
+                        telegram_id INTEGER UNIQUE NOT NULL,
+                        username VARCHAR,
+                        first_name VARCHAR,
+                        last_name VARCHAR,
+                        balance INTEGER NOT NULL DEFAULT 0,
+                        role userrole NOT NULL DEFAULT 'USER',
+                        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                        updated_at TIMESTAMP WITH TIME ZONE
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users (telegram_id);
+                """))
+                logger.info("Created users table")
+            else:
+                # Check if balance column exists, if not add it
+                if 'balance' not in existing_columns:
+                    conn.execute(text("""
+                        ALTER TABLE users ADD COLUMN balance INTEGER NOT NULL DEFAULT 0;
+                    """))
+                    logger.info("Added balance column to users table")
+
+            # Create signals table
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS signals (
+                    id SERIAL PRIMARY KEY,
+                    signal_number INTEGER NOT NULL,
+                    symbol VARCHAR NOT NULL,
+                    category signalcategory NOT NULL,
+                    signal_type signaltype NOT NULL,
+                    action signalaction,
+                    position_size VARCHAR NOT NULL,
+                    old_position_size VARCHAR,
+                    entry_price VARCHAR,
+                    exit_price VARCHAR,
+                    leverage VARCHAR NOT NULL DEFAULT '1',
+                    close_percentage FLOAT,
+                    realized_pnl VARCHAR,
+                    unrealized_pnl VARCHAR,
+                    profit_percentage FLOAT,
+                    entry_time TIMESTAMP WITH TIME ZONE NOT NULL,
+                    exit_time TIMESTAMP WITH TIME ZONE,
+                    is_completed BOOLEAN NOT NULL DEFAULT FALSE,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_signals_signal_number ON signals (signal_number);
+                CREATE INDEX IF NOT EXISTS idx_signals_symbol ON signals (symbol);
+            """))
+            logger.info("Created signals table")
+
+            # Create other tables...
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS user_signals (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER REFERENCES users(id),
+                    signal_id INTEGER REFERENCES signals(id),
+                    received_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                );
+
+                CREATE TABLE IF NOT EXISTS position_updates (
+                    id SERIAL PRIMARY KEY,
+                    signal_id INTEGER REFERENCES signals(id),
+                    action signalaction NOT NULL,
+                    position_size VARCHAR NOT NULL,
+                    price VARCHAR,
+                    close_percentage FLOAT,
+                    realized_pnl VARCHAR,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                );
+
+                CREATE TABLE IF NOT EXISTS transactions (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER REFERENCES users(id),
+                    amount FLOAT NOT NULL,
+                    transaction_type transactiontype NOT NULL,
+                    details VARCHAR,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                );
+
+                CREATE TABLE IF NOT EXISTS packages (
+                    id SERIAL PRIMARY KEY,
+                    name VARCHAR NOT NULL,
+                    signals_count INTEGER NOT NULL,
+                    price FLOAT NOT NULL,
+                    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                    updated_at TIMESTAMP WITH TIME ZONE
+                );
+            """))
+            logger.info("Created remaining tables")
+
+    except Exception as e:
+        logger.error(f"Error creating tables: {e}")
+        raise
+
+
+async def create_default_packages():
+    """Create default packages if they don't exist."""
+    try:
+        with SessionLocal() as db:
+            # Check if packages already exist
+            if db.query(models.Package).count() == 0:
+                # Default packages
+                packages = [
+                    models.Package(name="Basic", signals_count=1, price=1.0, is_active=True),
+                    models.Package(name="Standard", signals_count=10, price=9.0, is_active=True),
+                    models.Package(name="Premium", signals_count=30, price=25.0, is_active=True),
+                    models.Package(name="VIP", signals_count=100, price=75.0, is_active=True)
+                ]
+
+                # Add packages to database
+                for package in packages:
+                    db.add(package)
+
+                db.commit()
+                logger.info(f"Created default packages")
+    except Exception as e:
+        logger.error(f"Error creating default packages: {e}")
+        raise
 
 app = FastAPI(title="Trading Signals API", lifespan=lifespan)
 
