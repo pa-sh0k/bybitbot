@@ -8,4 +8,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Expose port
 EXPOSE 8001
 
-CMD ["python", "-m", "app.main"]
+CMD ["python", "-m", "main"]
