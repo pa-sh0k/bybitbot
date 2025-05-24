@@ -9,16 +9,14 @@ services:
       - POSTGRES_PASSWORD=${DB_PASSWORD}
       - POSTGRES_USER=${DB_USER}
       - POSTGRES_DB=${DB_NAME}
-      - POSTGRES_HOST=5433
-    ports:
-      - "5433:5433"
+      - POSTGRES_PORT=5433
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 5s
       timeout: 5s
       retries: 5
-    networks:
-      - bybit_app
+    ports:
+      - "5433:5433"  # Optional: expose for debugging
 
   api:
     build: ./api
@@ -26,18 +24,23 @@ services:
       db:
         condition: service_healthy
     environment:
-      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@db:5433/${DB_NAME}
-      - BOT_SERVICE_URL=http://bot:8001
+      # Database configuration that matches database.py
       - PG_USER=${DB_USER}
       - PG_PASSWORD=${DB_PASSWORD}
+      - PG_DATABASE=${DB_NAME}
       - PG_HOST=db
       - PG_PORT=5433
-      - PG_DATABASE=${DB_NAME}
+      # Bybit API configuration
+      - BYBIT_API_KEY=${BYBIT_API_KEY}
+      - BYBIT_API_SECRET=${BYBIT_API_SECRET}
+      - BYBIT_TESTNET=${BYBIT_TESTNET}
+      # Bot service URL
+      - BOT_SERVICE_URL=http://bot:8001
     volumes:
-      - ./api:/api
+      - ./api:/app
     restart: always
-    networks:
-      - bybit_app
+#    ports:
+#      - "8000:8000"  # Optional: expose for debugging
 
   bot:
     build: ./bot
@@ -52,10 +55,10 @@ services:
       - ADMIN_USER_IDS=${ADMIN_USER_IDS}
       - PAYMENT_PROVIDER_TOKEN=${PAYMENT_PROVIDER_TOKEN}
     volumes:
-      - ./bot:/bot
+      - ./bot:/app
     restart: always
-    networks:
-      - bybit_app
+#    ports:
+#      - "8001:8001"  # Optional: expose for debugging
 
   nginx:
     build: ./nginx
@@ -65,11 +68,6 @@ services:
       - api
       - bot
     restart: always
-    networks:
-      - bybit_app
-networks:
-  bybit_app:
-    driver: bridge
 
 volumes:
   postgres_data:
