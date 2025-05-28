@@ -295,7 +295,7 @@ def format_partial_close_signal(signal: Dict[str, Any]) -> str:
     message = (
         f"<b>Сделка №{signal['signal_number']:05d}</b>\n\n"
         f"<b>{direction} {symbol}</b>\n"
-        f"<b>Закрыто:</b> {signal['close_percentage']}%\n"
+        f"<b>Закрыто:</b> {int(signal['close_percentage'])}%\n"
         # f"<b>Цена закрытия:</b> {signal.get('exit_price', 'N/A')}\n"
         f"<b>Осталось:</b> {signal['position_size']} ({remaining_percentage}%)"
     )
