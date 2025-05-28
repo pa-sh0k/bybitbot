@@ -31,7 +31,7 @@ class UserRole(enum.Enum):
 
 
 class TransactionType(enum.Enum):
-    USDT_DEPOSIT = "USDT_DEPOSIT"
+    DEPOSIT = "DEPOSIT"
     SIGNAL_PURCHASE = "SIGNAL_PURCHASE"
     SIGNAL_USED = "SIGNAL_USED"
 
