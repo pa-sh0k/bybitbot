@@ -290,7 +290,7 @@ def add_usdt_balance(
     transaction = schemas.TransactionCreate(
         user_id=db_user.id,
         amount=balance_update.usdt_amount,
-        transaction_type=schemas.TransactionType.USDT_DEPOSIT,
+        transaction_type=schemas.TransactionType.DEPOSIT,
         details="USDT balance deposit"
     )
     crud.create_transaction(db, transaction)
