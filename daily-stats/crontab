@@ -1,0 +1,2 @@
+# Daily statistics at 8PM UTC+3 (5PM UTC)
+55 15 * * * cd /app && python3 daily_stats.py >> /var/log/daily_stats.log 2>&1
