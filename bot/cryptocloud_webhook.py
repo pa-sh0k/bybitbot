@@ -84,7 +84,7 @@ async def handle_cryptocloud_webhook(request: Request) -> Dict[str, Any]:
         # Add USDT balance to user account
         try:
             async with aiohttp.ClientSession() as session:
-                balance_update = {"usdt_amount": usdt_amount}
+                balance_update = {"usdt_amount": usdt_amount, 'transaction_id': webhook_data.invoice_id}
                 async with session.post(
                         f"{settings.API_URL}/api/users/{user_telegram_id}/add_usdt_balance",
                         json=balance_update
@@ -92,6 +92,14 @@ async def handle_cryptocloud_webhook(request: Request) -> Dict[str, Any]:
                     if response.status == 200:
                         result = await response.json()
                         logger.info(f"Successfully added {usdt_amount} USDT to user {user_telegram_id}")
+
+                        if result['duplicate']:
+                            return {
+                                "message": "Duplicate",
+                                "processed": True,
+                                "user_id": user_telegram_id,
+                                "amount": usdt_amount
+                            }
 
                         # Send success notification to user
                         await send_payment_notification(user_telegram_id, usdt_amount, webhook_data.invoice_id)

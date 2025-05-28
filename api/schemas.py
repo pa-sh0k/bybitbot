@@ -152,6 +152,7 @@ class Package(PackageBase):
 class BalanceUpdate(BaseModel):
     usdt_amount: Optional[float] = None
     signals_amount: Optional[int] = None
+    transaction_id: str
 
 class PurchaseSignalsRequest(BaseModel):
     package_id: int

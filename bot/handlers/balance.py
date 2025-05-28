@@ -52,10 +52,10 @@ async def get_user(telegram_id: int):
 
 
 # Helper function to add USDT balance to user
-async def add_usdt_balance(telegram_id: int, amount: float):
+async def add_usdt_balance(telegram_id: int, amount: float, invoice_id: str):
     try:
         async with aiohttp.ClientSession() as session:
-            params = {"usdt_amount": amount}
+            params = {"usdt_amount": amount, 'transaction_id': invoice_id}
             async with session.post(f"{settings.API_URL}/api/users/{telegram_id}/add_usdt_balance",
                                     json=params) as response:
                 return await response.json()
@@ -252,7 +252,7 @@ async def check_payment_callback(callback: types.CallbackQuery, state: FSMContex
 
                 if amount > 0:
                     # Add USDT to user balance
-                    result = await add_usdt_balance(callback.from_user.id, amount)
+                    result = await add_usdt_balance(callback.from_user.id, amount, invoice_id)
 
                     if result and result.get("success"):
                         user_data = await get_user(callback.from_user.id)

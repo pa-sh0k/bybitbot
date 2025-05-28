@@ -41,14 +41,38 @@ def create_user(db: Session, user: schemas.UserCreate):
     return db_user
 
 
-def update_usdt_balance(db: Session, user_id: int, amount: float):
+def check_transaction_exists(db: Session, transaction_id: str) -> bool:
+    """Check if a transaction with the given ID already exists in details field"""
+    return db.query(models.Transaction).filter(
+        models.Transaction.details.contains(f"transaction_id:{transaction_id}")
+    ).first() is not None
+
+
+def update_usdt_balance(db: Session, user_id: int, amount: float, transaction_id: str):
     """Update user's USDT balance"""
     db_user = get_user(db, user_id)
+
+    if transaction_id and check_transaction_exists(db, transaction_id):
+        # Transaction already processed, return existing user data without changes
+        db_user = get_user(db, user_id)
+        return {
+            "success": True,
+            "duplicate": True,
+            "message": "Transaction already processed",
+            "user": db_user
+        }
+
     if db_user:
         db_user.usdt_balance += amount
         db.commit()
         db.refresh(db_user)
-    return db_user
+
+    return {
+        "success": True,
+        "duplicate": False,
+        "message": "Balance updated successfully",
+        "user": db_user
+    }
 
 
 def update_signals_balance(db: Session, user_id: int, amount: int):

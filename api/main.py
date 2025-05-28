@@ -284,18 +284,20 @@ def add_usdt_balance(
     if balance_update.usdt_amount is None:
         raise HTTPException(status_code=400, detail="USDT amount is required")
 
-    updated_user = crud.update_usdt_balance(db, db_user.id, balance_update.usdt_amount)
+    response = crud.update_usdt_balance(db, db_user.id, balance_update.usdt_amount, balance_update.transaction_id)
 
-    # Record transaction
-    transaction = schemas.TransactionCreate(
-        user_id=db_user.id,
-        amount=balance_update.usdt_amount,
-        transaction_type=schemas.TransactionType.DEPOSIT,
-        details="USDT balance deposit"
-    )
-    crud.create_transaction(db, transaction)
+    if response['success'] and not response['duplicate']:
+        # Record transaction
+        transaction = schemas.TransactionCreate(
+            user_id=db_user.id,
+            amount=balance_update.usdt_amount,
+            transaction_type=schemas.TransactionType.DEPOSIT,
+            details=f"USDT balance deposit | transaction_id:{balance_update.transaction_id}"
+        )
+        crud.create_transaction(db, transaction)
 
-    return {"success": True, "usdt_balance": updated_user.usdt_balance, "signals_balance": updated_user.signals_balance}
+    user = response['user']
+    return {"success": True, "usdt_balance": user.usdt_balance, "signals_balance": user.signals_balance, 'duplicate': user['duplicate']}
 
 
 @app.post("/api/users/{telegram_id}/purchase_signals")
