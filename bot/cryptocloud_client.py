@@ -115,7 +115,7 @@ class CryptoCloudClient:
                         return {
                             "success": True,
                             "invoice_id": invoice["uuid"],
-                            "status": invoice["status_invoice"],
+                            "status": invoice["status"],
                             "amount": invoice["amount"],
                             "amount_crypto": invoice.get("amount_crypto"),
                             "currency": invoice["currency"],

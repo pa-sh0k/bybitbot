@@ -26,7 +26,7 @@ class CryptoCloudWebhook(BaseModel):
     currency: str
     order_id: Optional[str] = None
     token: Optional[str] = None  # JWT token for verification
-    invoice_info: Optional[Dict[str, Any]] = None  # Additional invoice information
+    invoice_id: Optional[str] = None  # Additional invoice information
 
 
 async def handle_cryptocloud_webhook(request: Request) -> Dict[str, Any]:
