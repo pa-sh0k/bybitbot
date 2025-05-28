@@ -58,7 +58,7 @@ class BybitSignalService:
 
                             for position in positions:
                                 symbol = position.get("symbol")
-                                side = position.get("side").upper()
+                                side = position.get("side")
                                 size = Decimal(position.get("size", "0"))
 
                                 # Only track non-zero positions
