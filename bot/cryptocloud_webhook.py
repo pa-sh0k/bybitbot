@@ -30,14 +30,15 @@ class CryptoCloudWebhook(BaseModel):
 
 
 async def handle_cryptocloud_webhook(request: Request) -> Dict[str, Any]:
-    """
-    Handle CryptoCloud webhook notifications for successful payments
+        """
+        Handle CryptoCloud webhook notifications for successful payments
 
-    This endpoint will be called by CryptoCloud when a payment is completed
-    """
-    try:
+        This endpoint will be called by CryptoCloud when a payment is completed
+        """
+        # try:
         # Get JSON payload
-        payload = await request.json()
+        form_data = await request.post()  # aiohttp method
+        payload = dict(form_data)  # Convert to dict
         logger.info(f"Received CryptoCloud webhook: {payload}")
 
         # Validate required fields
@@ -110,11 +111,11 @@ async def handle_cryptocloud_webhook(request: Request) -> Dict[str, Any]:
             logger.error(f"Error updating user balance: {e}")
             raise HTTPException(status_code=500, detail="Failed to process payment")
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error processing CryptoCloud webhook: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+    # except HTTPException:
+    #     raise
+    # except Exception as e:
+    #     logger.error(f"Error processing CryptoCloud webhook: {e}")
+    #     raise HTTPException(status_code=500, detail="Internal server error")
 
 
 async def send_payment_notification(user_telegram_id: int, amount: float, invoice_id: str):

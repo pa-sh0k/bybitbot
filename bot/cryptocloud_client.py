@@ -102,37 +102,38 @@ class CryptoCloudClient:
             "uuids": [invoice_id]
         }
 
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(url, headers=headers, json=payload) as response:
-                    response_data = await response.json()
+        # try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, headers=headers, json=payload) as response:
+                response_data = await response.json()
 
-                    if response.status == 200 and response_data.get("status") == "success":
-                        invoices = response_data.get("result", [])
-                        if invoices:
-                            invoice = invoices[0]
-                            return {
-                                "success": True,
-                                "invoice_id": invoice["uuid"],
-                                "status": invoice["status_invoice"],
-                                "amount": invoice["amount"],
-                                "amount_crypto": invoice.get("amount_crypto"),
-                                "currency": invoice["currency"],
-                                "paid_at": invoice.get("date_update"),
-                                "order_id": invoice.get("order_id")
-                            }
+                if response.status == 200 and response_data.get("status") == "success":
+                    invoices = response_data.get("result", [])
+                    if invoices:
+                        invoice = invoices[0]
+                        logger.info(f"INVOICE {invoice}")
+                        return {
+                            "success": True,
+                            "invoice_id": invoice["uuid"],
+                            "status": invoice["status_invoice"],
+                            "amount": invoice["amount"],
+                            "amount_crypto": invoice.get("amount_crypto"),
+                            "currency": invoice["currency"],
+                            "paid_at": invoice.get("date_update"),
+                            "order_id": invoice.get("order_id")
+                        }
 
-                    return {
-                        "success": False,
-                        "error": "Invoice not found"
-                    }
+                return {
+                    "success": False,
+                    "error": "Invoice not found"
+                }
 
-        except Exception as e:
-            logger.error(f"Error getting invoice info: {e}")
-            return {
-                "success": False,
-                "error": f"Network error: {str(e)}"
-            }
+        # except Exception as e:
+        #     logger.error(f"Error getting invoice info: {e}")
+        #     return {
+        #         "success": False,
+        #         "error": f"Network error: {str(e)}"
+        #     }
 
     def verify_webhook_signature(self, payload: Dict[str, Any], signature: str) -> bool:
         """
