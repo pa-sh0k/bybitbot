@@ -284,7 +284,8 @@ def add_usdt_balance(
     if balance_update.usdt_amount is None:
         raise HTTPException(status_code=400, detail="USDT amount is required")
 
-    response = crud.update_usdt_balance(db, db_user.id, balance_update.usdt_amount, balance_update.transaction_id)
+    transaction_id = balance_update.transaction_id.replace('INV-', '')
+    response = crud.update_usdt_balance(db, db_user.id, balance_update.usdt_amount, transaction_id)
 
     user = response['user']
     return {"success": True, "usdt_balance": user.usdt_balance, "signals_balance": user.signals_balance, 'duplicate': response['duplicate']}
