@@ -85,7 +85,7 @@ class BybitSignalService:
                         # Convert signal data to position key format
                         category = signal.category.value.lower()
                         symbol = signal.symbol
-                        side = signal.signal_type.value.upper()  # BUY or SELL
+                        side = signal.signal_type.value.lower().capitalize()  # BUY or SELL
 
                         position_key = f"{category}_{symbol}_{side}"
 
