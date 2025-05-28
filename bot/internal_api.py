@@ -101,7 +101,7 @@ async def send_signal_to_users(request: SendSignalRequest):
 
                 # Send message to user
                 if bot_instance:
-                    await bot_instance.send_message(
+                    await sender.send_message(bot_instance,
                         user["telegram_id"],
                         signal_message,
                         parse_mode="HTML"
@@ -145,7 +145,7 @@ async def send_exit_signal(request: SendExitSignalRequest):
         for user in users:
             try:
                 if bot_instance:
-                    await bot_instance.send_message(
+                    await sender.send_message(bot_instance,
                         user["telegram_id"],
                         exit_message,
                         parse_mode="HTML"
@@ -195,7 +195,7 @@ async def send_daily_summary(request: SendDailySummaryRequest):
         for user in users:
             try:
                 if bot_instance:
-                    await bot_instance.send_message(
+                    await sender.send_message(bot_instance,
                         user["telegram_id"],
                         summary_message,
                         parse_mode="HTML"
