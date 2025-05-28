@@ -54,6 +54,10 @@ services:
       - API_URL=http://api:8000
       - ADMIN_USER_IDS=${ADMIN_USER_IDS}
       - PAYMENT_PROVIDER_TOKEN=${PAYMENT_PROVIDER_TOKEN}
+      # CryptoCloud configuration
+      - CRYPTOCLOUD_API_KEY=${CRYPTOCLOUD_API_KEY}
+      - CRYPTOCLOUD_SHOP_ID=${CRYPTOCLOUD_SHOP_ID}
+      - CRYPTOCLOUD_WEBHOOK_URL=${CRYPTOCLOUD_WEBHOOK_URL}
     volumes:
       - ./bot:/app
     restart: always

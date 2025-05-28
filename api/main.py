@@ -472,22 +472,37 @@ async def close_test_signal(
 
 
 # Bot API endpoint for sending messages
+# Add this endpoint to your api/main.py file
+
 @app.post("/api/bot/send_message")
 async def send_bot_message(
-        telegram_id: int,
-        message: str,
+        request: dict,  # Use dict instead of specific model for flexibility
         background_tasks: BackgroundTasks = None
 ):
-    from bot_api import send_message
-    if background_tasks:
-        background_tasks.add_task(
-            send_message,
-            telegram_id=telegram_id,
-            message=message
-        )
-    else:
-        asyncio.create_task(send_message(telegram_id, message))
-    return {"success": True}
+    """Send a message to a user via the bot service"""
+    try:
+        telegram_id = request.get("telegram_id")
+        message = request.get("message")
+
+        if not telegram_id or not message:
+            raise HTTPException(status_code=400, detail="telegram_id and message are required")
+
+        # Send message via bot service
+        from bot_api import send_message
+        if background_tasks:
+            background_tasks.add_task(
+                send_message,
+                telegram_id=telegram_id,
+                message=message
+            )
+        else:
+            asyncio.create_task(send_message(telegram_id, message))
+
+        return {"success": True, "message": "Message queued for sending"}
+
+    except Exception as e:
+        logger.error(f"Error in send_bot_message: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # Health check endpoint

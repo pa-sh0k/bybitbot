@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 from typing import List, Dict, Any
 import logging
@@ -12,6 +12,7 @@ from handlers.signals import (
     format_exit_signal,
     format_increase_signal
 )
+from cryptocloud_webhook import handle_cryptocloud_webhook
 
 logger = logging.getLogger(__name__)
 
@@ -224,6 +225,19 @@ async def send_message(request: SendMessageRequest):
     except Exception as e:
         logger.error(f"Error sending message: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# CryptoCloud webhook endpoint
+@internal_app.post("/webhook/cryptocloud")
+async def cryptocloud_webhook_endpoint(request: Request):
+    """CryptoCloud webhook endpoint for payment notifications"""
+    return await handle_cryptocloud_webhook(request)
+
+
+@internal_app.get("/webhook/cryptocloud/test")
+async def test_cryptocloud_webhook():
+    """Test endpoint to verify webhook is accessible"""
+    return {"status": "ok", "message": "CryptoCloud webhook endpoint is active"}
 
 
 # Health check for internal API

@@ -4,6 +4,12 @@ from aiogram.fsm.state import State, StatesGroup
 import logging
 import aiohttp
 from datetime import datetime
+import os
+import sys
+
+# Add the directory containing cryptocloud_client.py to Python path
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, current_dir)
 
 from config import settings
 from keyboards import (
@@ -11,9 +17,19 @@ from keyboards import (
     get_cancel_keyboard, get_back_keyboard, get_buy_signals_menu,
     get_packages_keyboard, get_package_confirm_keyboard, get_back_to_balance_keyboard
 )
+from cryptocloud_client import CryptoCloudClient
 
 router = Router()
 logger = logging.getLogger(__name__)
+
+# Initialize CryptoCloud client
+cryptocloud_client = None
+if hasattr(settings, 'CRYPTOCLOUD_API_KEY') and hasattr(settings, 'CRYPTOCLOUD_SHOP_ID'):
+    cryptocloud_client = CryptoCloudClient(
+        api_key=settings.CRYPTOCLOUD_API_KEY,
+        shop_id=settings.CRYPTOCLOUD_SHOP_ID,
+        webhook_url=settings.CRYPTOCLOUD_WEBHOOK_URL if hasattr(settings, 'CRYPTOCLOUD_WEBHOOK_URL') else None
+    )
 
 
 # States
@@ -102,6 +118,14 @@ async def back_to_balance_callback(callback: types.CallbackQuery):
 
 @router.callback_query(F.data == "deposit_usdt")
 async def deposit_usdt_callback(callback: types.CallbackQuery):
+    if not cryptocloud_client:
+        await callback.message.edit_text(
+            "❌ Сервис пополнения временно недоступен. Обратитесь в поддержку.",
+            reply_markup=get_back_to_balance_keyboard()
+        )
+        await callback.answer()
+        return
+
     await callback.message.edit_text(
         "💳 Выберите сумму для пополнения USDT:",
         reply_markup=get_usdt_deposit_amounts_keyboard()
@@ -111,46 +135,163 @@ async def deposit_usdt_callback(callback: types.CallbackQuery):
 
 @router.callback_query(F.data.startswith("deposit_usdt_"))
 async def deposit_usdt_amount_callback(callback: types.CallbackQuery, state: FSMContext):
+    if not cryptocloud_client:
+        await callback.message.edit_text(
+            "❌ Сервис пополнения временно недоступен. Обратитесь в поддержку.",
+            reply_markup=get_back_to_balance_keyboard()
+        )
+        await callback.answer()
+        return
+
     # Extract amount from callback data
     amount = float(callback.data.split("_")[-1])
 
     # Store amount in state
     await state.update_data(usdt_deposit_amount=amount)
 
-    # Here we would integrate with a payment provider
-    # For now, we'll simulate a payment link
-    payment_text = (
-        f"💰 Вы выбрали пополнение на <b>{amount} USDT</b>\n\n"
-        f"Для проведения платежа нажмите на кнопку ниже.\n\n"
-        f"После подтверждения оплаты USDT будут автоматически зачислены на ваш баланс."
-    )
-
-    # Simulate payment process - in real implementation, redirect to payment provider
+    # Show loading message
     await callback.message.edit_text(
-        payment_text,
-        reply_markup=get_back_to_balance_keyboard(),
-        parse_mode="HTML"
+        f"⏳ Создаю счет на пополнение {amount} USDT...",
+        reply_markup=get_back_to_balance_keyboard()
     )
 
-    # For demonstration, let's simulate successful payment
-    # In a real implementation, this would be handled by a webhook from the payment provider
-    await state.set_state(DepositStates.waiting_for_payment)
+    try:
+        # Create unique order ID
+        order_id = f"deposit_{callback.from_user.id}_{int(datetime.now().timestamp())}"
 
-    # Simulate payment processing for demo
-    # In real implementation, remove this and use webhook callback
-    result = await add_usdt_balance(callback.from_user.id, amount)
-    if result and result.get("success"):
-        user_data = await get_user(callback.from_user.id)
-        await callback.message.answer(
-            f"✅ <b>Пополнение успешно!</b>\n\n"
-            f"💰 <b>USDT баланс:</b> {user_data['usdt_balance']:.2f}\n"
-            f"🎯 <b>Сигналы:</b> {user_data['signals_balance']} шт.",
-            reply_markup=get_main_menu(),
-            parse_mode="HTML"
+        # Create invoice with CryptoCloud
+        invoice_result = await cryptocloud_client.create_invoice(
+            amount=amount,
+            currency="USD",
+            order_id=order_id
         )
-        await state.clear()
+
+        if invoice_result.get("success"):
+            # Store invoice data in state
+            await state.update_data(
+                invoice_id=invoice_result["invoice_id"],
+                payment_url=invoice_result["payment_url"],
+                order_id=order_id
+            )
+
+            # Create payment keyboard with real payment URL
+            from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+            payment_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="💳 Оплатить", url=invoice_result["payment_url"])],
+                [InlineKeyboardButton(text="🔍 Проверить платеж",
+                                      callback_data=f"check_payment_{invoice_result['invoice_id']}")],
+                [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_balance")]
+            ])
+
+            payment_text = (
+                f"💰 <b>Счет на пополнение создан!</b>\n\n"
+                f"💵 <b>Сумма:</b> {amount} USDT\n"
+                f"🆔 <b>ID счета:</b> <code>{invoice_result['invoice_id']}</code>\n\n"
+                f"📝 <b>Инструкция:</b>\n"
+                f"1. Нажмите кнопку «Оплатить»\n"
+                f"2. Выберите удобную криптовалюту\n"
+                f"3. Переведите точную сумму на указанный адрес\n"
+                f"4. Дождитесь подтверждения транзакции\n\n"
+                f"💡 <b>Важно:</b> Переводите точную сумму с учетом комиссии сети.\n"
+                f"⏰ Счет действителен в течение 30 минут.\n\n"
+                f"После успешной оплаты USDT будут зачислены на ваш баланс автоматически."
+            )
+
+            await callback.message.edit_text(
+                payment_text,
+                reply_markup=payment_keyboard,
+                parse_mode="HTML"
+            )
+
+            # Set state to waiting for payment
+            await state.set_state(DepositStates.waiting_for_payment)
+
+        else:
+            error_text = (
+                f"❌ <b>Ошибка создания счета</b>\n\n"
+                f"Не удалось создать счет для пополнения.\n"
+                f"Причина: {invoice_result.get('error', 'Неизвестная ошибка')}\n\n"
+                f"Пожалуйста, попробуйте позже или обратитесь в поддержку."
+            )
+            await callback.message.edit_text(
+                error_text,
+                reply_markup=get_back_to_balance_keyboard(),
+                parse_mode="HTML"
+            )
+
+    except Exception as e:
+        logger.error(f"Error creating payment invoice: {e}")
+        await callback.message.edit_text(
+            "❌ Произошла ошибка при создании счета. Попробуйте позже или обратитесь в поддержку.",
+            reply_markup=get_back_to_balance_keyboard()
+        )
 
     await callback.answer()
+
+
+@router.callback_query(F.data.startswith("check_payment_"))
+async def check_payment_callback(callback: types.CallbackQuery, state: FSMContext):
+    if not cryptocloud_client:
+        await callback.answer("❌ Сервис временно недоступен")
+        return
+
+    # Extract invoice ID from callback data
+    invoice_id = callback.data.split("check_payment_")[1]
+
+    try:
+        # Get invoice information
+        invoice_info = await cryptocloud_client.get_invoice_info(invoice_id)
+
+        if invoice_info.get("success"):
+            status = invoice_info.get("status", "").lower()
+
+            if status == "paid":
+                # Payment successful - update user balance
+                state_data = await state.get_data()
+                amount = state_data.get("usdt_deposit_amount", 0)
+
+                if amount > 0:
+                    # Add USDT to user balance
+                    result = await add_usdt_balance(callback.from_user.id, amount)
+
+                    if result and result.get("success"):
+                        user_data = await get_user(callback.from_user.id)
+                        success_text = (
+                            f"✅ <b>Платеж подтвержден!</b>\n\n"
+                            f"💰 <b>Зачислено:</b> {amount} USDT\n"
+                            f"💼 <b>Новый баланс:</b> {user_data['usdt_balance']:.2f} USDT\n"
+                            f"🎯 <b>Сигналы:</b> {user_data['signals_balance']} шт.\n\n"
+                            f"Спасибо за пополнение!"
+                        )
+
+                        await callback.message.edit_text(
+                            success_text,
+                            reply_markup=get_back_keyboard(),
+                            parse_mode="HTML"
+                        )
+
+                        # Clear state
+                        await state.clear()
+                    else:
+                        await callback.answer("❌ Ошибка при зачислении средств")
+                else:
+                    await callback.answer("❌ Ошибка в данных платежа")
+
+            elif status in ["waiting", "pending"]:
+                await callback.answer("⏳ Платеж еще не поступил. Подождите немного и повторите проверку.")
+
+            elif status == "expired":
+                await callback.answer("⏰ Время действия счета истекло. Создайте новый счет.")
+
+            else:
+                await callback.answer(f"ℹ️ Статус платежа: {status}")
+
+        else:
+            await callback.answer("❌ Не удалось проверить статус платежа")
+
+    except Exception as e:
+        logger.error(f"Error checking payment status: {e}")
+        await callback.answer("❌ Ошибка при проверке платежа")
 
 
 @router.callback_query(F.data == "buy_signals")

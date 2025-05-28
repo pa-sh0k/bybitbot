@@ -65,7 +65,7 @@ def get_payment_confirm_keyboard(invoice_url: str):
 # USDT deposit amount keyboard
 def get_usdt_deposit_amounts_keyboard():
     keyboard = []
-    amounts = [5, 10, 20, 50, 100, 200]
+    amounts = [15, 25, 50, 100, 200]
 
     buttons = []
     for amount in amounts:
