@@ -62,6 +62,14 @@ def update_usdt_balance(db: Session, user_id: int, amount: float, transaction_id
             "user": db_user
         }
 
+    transaction = schemas.TransactionCreate(
+            user_id=db_user.id,
+            amount=amount,
+            transaction_type=schemas.TransactionType.DEPOSIT,
+            details=f"USDT balance deposit | transaction_id:{transaction_id}"
+        )
+    create_transaction(db, transaction)
+
     if db_user:
         db_user.usdt_balance += amount
         db.commit()
