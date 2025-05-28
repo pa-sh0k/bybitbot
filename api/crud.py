@@ -181,6 +181,8 @@ def update_signal(db: Session, signal_id: int, signal_update: schemas.SignalUpda
         db_signal.action = signal_update.action
         db_signal.position_size = signal_update.position_size
 
+        if signal_update.entry_price:
+            db_signal.entry_price = signal_update.entry_price
         if signal_update.old_position_size:
             db_signal.old_position_size = signal_update.old_position_size
         if signal_update.exit_price:

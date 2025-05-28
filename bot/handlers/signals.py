@@ -261,7 +261,7 @@ async def show_statistics(message: types.Message):
 def format_entry_signal(signal: Dict[str, Any]) -> str:
     """Format entry signal message."""
     category_emoji = "🔍" if signal['category'] == 'SPOT' else "⚡"
-    direction = "🟩 LONG" if signal['signal_type'] == 'BUY' else "🟩 SHORT"
+    direction = "🟩 Новая сделка\n\nLONG" if signal['signal_type'] == 'BUY' else "🟩 Новая сделка\n\nSHORT"
     symbol = signal['symbol'] if not signal['symbol'].endswith('USDT') else signal['symbol'][:-4] + '/' + 'USDT'
     message = (
         f"<b>Сделка №{signal['signal_number']:05d}</b>\n\n"
@@ -287,17 +287,17 @@ def format_entry_signal(signal: Dict[str, Any]) -> str:
 
 def format_partial_close_signal(signal: Dict[str, Any]) -> str:
     """Format partial close signal message with enhanced information."""
-    direction = "🟧 LONG" if signal['signal_type'] == 'BUY' else "🟧 SHORT"
+    direction = "🟧 Частичное закрытие\n\nLONG" if signal['signal_type'] == 'BUY' else "🟧 Частичное закрытие\n\nSHORT"
     symbol = signal['symbol'] if not signal['symbol'].endswith('USDT') else signal['symbol'][:-4] + '/' + 'USDT'
     # Calculate remaining percentage
-    remaining_percentage = 100 - signal['close_percentage']
+    remaining_percentage = 100 - int(signal['close_percentage'])
 
     message = (
         f"<b>Сделка №{signal['signal_number']:05d}</b>\n\n"
         f"<b>{direction} {symbol}</b>\n"
-        f"<b>Закрыто:</b> {signal['close_percentage']:.1f}%\n"
-        f"<b>Цена закрытия:</b> {signal.get('exit_price', 'N/A')}\n"
-        f"<b>Осталось:</b> {signal['position_size']} ({remaining_percentage:.1f}%)"
+        f"<b>Закрыто:</b> {signal['close_percentage']}%\n"
+        # f"<b>Цена закрытия:</b> {signal.get('exit_price', 'N/A')}\n"
+        f"<b>Осталось:</b> {signal['position_size']} ({remaining_percentage}%)"
     )
 
     # Add average entry price if available
@@ -323,7 +323,7 @@ def format_partial_close_signal(signal: Dict[str, Any]) -> str:
 def format_exit_signal(signal: Dict[str, Any]) -> str:
     """Format exit signal message with enhanced information."""
     category_emoji = "🔍" if signal['category'] == 'SPOT' else "⚡"
-    direction = "🟥 LONG" if signal['signal_type'] == 'BUY' else "🟥 SHORT"
+    direction = "🟥 Закрытие сделки\n\nLONG" if signal['signal_type'] == 'BUY' else "🟥 Закрытие сделки\n\nSHORT"
     symbol = signal['symbol'] if not signal['symbol'].endswith('USDT') else signal['symbol'][:-4] + '/' + 'USDT'
     message = (
         f"<b>Сделка №{signal['signal_number']:05d}</b>\n\n"
@@ -361,7 +361,7 @@ def format_exit_signal(signal: Dict[str, Any]) -> str:
 
 def format_increase_signal(signal: Dict[str, Any]) -> str:
     """Format position increase signal message with enhanced information."""
-    direction = "🟨 LONG" if signal['signal_type'] == 'BUY' else "🟨 SHORT"
+    direction = "🟨 Увеличение позиции\n\nLONG" if signal['signal_type'] == 'BUY' else "🟨 Увеличение позиции\n\nSHORT"
     symbol = signal['symbol'] if not signal['symbol'].endswith('USDT') else signal['symbol'][:-4] + '/' + 'USDT'
 
     # Calculate increase percentage

@@ -129,6 +129,7 @@ class BybitSignalService:
 
         # Update signal with partial close info
         signal_update = schemas.SignalUpdate(
+            entry_price=signal_data["avg_price"],
             action=schemas.SignalAction.PARTIAL_CLOSE,
             position_size=signal_data["size"],
             old_position_size=signal_data["old_size"],
@@ -222,6 +223,7 @@ class BybitSignalService:
 
         # Update signal with increased size
         signal_update = schemas.SignalUpdate(
+            entry_price=signal_data["avg_price"],
             action=schemas.SignalAction.INCREASE,
             position_size=signal_data["size"],
             old_position_size=signal_data["old_size"]

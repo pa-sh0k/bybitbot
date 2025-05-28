@@ -64,6 +64,7 @@ class SignalCreate(SignalBase):
     entry_time: datetime
 
 class SignalUpdate(BaseModel):
+    entry_price: Optional[str] = None
     action: SignalAction
     position_size: str
     old_position_size: Optional[str] = None
