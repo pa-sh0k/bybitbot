@@ -1,135 +1,195 @@
 import asyncio
 import logging
-from aiogram import Bot, Dispatcher
+from aiogram import Bot, Dispatcher, Router
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import BotCommand, BotCommandScopeDefault
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiohttp import web
-from aiohttp.web_app import Application
+import sys
+import uvicorn
+from fastapi import FastAPI
 
 from config import settings
-from handlers import start, balance, signals, admin
+from handlers import start, balance, signals, support
 from internal_api import internal_app, set_bot_instance
 from cryptocloud_webhook import handle_cryptocloud_webhook, set_bot_instance_for_webhook
 
-# Set up logging
+# Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
 )
-logger = logging.getLogger(__name__)
 
-# Initialize bot and dispatcher
-bot = Bot(token=settings.BOT_TOKEN)
-dp = Dispatcher()
-
-# Include routers
-dp.include_router(start.router)
-dp.include_router(balance.router)
-dp.include_router(signals.router)
-dp.include_router(admin.router)
+# Global bot instance
+bot = None
 
 
-async def on_startup():
-    """Called when the bot starts up."""
-    logger.info("Bot is starting up...")
-    # Set webhook URL if provided
-    if settings.WEBHOOK_URL:
-        await bot.set_webhook(
-            url=f"{settings.WEBHOOK_URL}{settings.WEBHOOK_PATH}",
-            allowed_updates=dp.resolve_used_update_types()
-        )
-        logger.info(f"Webhook set to {settings.WEBHOOK_URL}{settings.WEBHOOK_PATH}")
+# Setup bot commands
+async def set_commands(bot: Bot):
+    commands = [
+        BotCommand(command="start", description="Запустить бота"),
+        BotCommand(command="help", description="Помощь"),
+        BotCommand(command="balance", description="Проверить баланс")
+    ]
+
+    await bot.set_my_commands(commands, scope=BotCommandScopeDefault())
 
 
-async def on_shutdown():
-    """Called when the bot shuts down."""
-    logger.info("Bot is shutting down...")
-    await bot.session.close()
+# Main function for setting up the bot
+async def main():
+    global bot
 
-
-def create_app() -> Application:
-    """Create and configure the aiohttp application."""
-
-    # Create main aiohttp app
-    app = web.Application()
-
-    # Set up webhook handler for Telegram
-    webhook_requests_handler = SimpleRequestHandler(
-        dispatcher=dp,
-        bot=bot,
-    )
-    webhook_requests_handler.register(app, path=settings.WEBHOOK_PATH)
-
-    # Add CryptoCloud webhook endpoint
-    async def cryptocloud_webhook_handler(request):
-        """Handle CryptoCloud webhook"""
-        try:
-            result = await handle_cryptocloud_webhook(request)
-            return web.json_response(result)
-        except Exception as e:
-            logger.error(f"Error in CryptoCloud webhook: {e}")
-            return web.json_response(
-                {"error": "Internal server error"},
-                status=500
-            )
-
-    # Add CryptoCloud webhook route
-    app.router.add_post('/webhook/cryptocloud', cryptocloud_webhook_handler)
-
-    # Add test endpoint for CryptoCloud webhook
-    async def test_cryptocloud_webhook(request):
-        return web.json_response({
-            "status": "ok",
-            "message": "CryptoCloud webhook endpoint is active"
-        })
-
-    app.router.add_get('/webhook/cryptocloud/test', test_cryptocloud_webhook)
-
-    # Mount internal API as a sub-application
-    app.add_subapp('/internal/', internal_app)
+    # Initialize Bot instance
+    bot = Bot(token=settings.BOT_TOKEN)
 
     # Set bot instance for internal API and webhook
     set_bot_instance(bot)
     set_bot_instance_for_webhook(bot)
 
-    # Add startup and shutdown handlers
-    app.on_startup.append(lambda app: asyncio.create_task(on_startup()))
-    app.on_shutdown.append(lambda app: asyncio.create_task(on_shutdown()))
+    # Initialize dispatcher with memory storage
+    dp = Dispatcher(storage=MemoryStorage())
 
-    return app
+    # Register all routers
+    dp.include_router(start.router)
+    dp.include_router(balance.router)
+    dp.include_router(signals.router)
+    dp.include_router(support.router)
 
+    # Setup commands
+    await set_commands(bot)
 
-async def main():
-    """Main function to run the bot."""
+    # Setup webhook if URL is provided
     if settings.WEBHOOK_URL:
-        # Webhook mode
-        app = create_app()
+        # Remove webhook first
+        await bot.delete_webhook()
+        # Set webhook
+        await bot.set_webhook(url=settings.WEBHOOK_URL + settings.WEBHOOK_PATH)
 
-        # Configure the application
+        # Create combined app
+        app = web.Application()
+
+        # Create webhook handler
+        webhook_handler = SimpleRequestHandler(
+            dispatcher=dp,
+            bot=bot
+        )
+
+        # Setup webhook routes
+        webhook_handler.register(app, path=settings.WEBHOOK_PATH)
+
+        # Add CryptoCloud webhook endpoint
+        async def cryptocloud_webhook_handler(request):
+            """Handle CryptoCloud webhook"""
+            try:
+                result = await handle_cryptocloud_webhook(request)
+                return web.json_response(result)
+            except Exception as e:
+                logging.error(f"Error in CryptoCloud webhook: {e}")
+                return web.json_response(
+                    {"error": "Internal server error"},
+                    status=500
+                )
+
+        # Add CryptoCloud webhook route
+        app.router.add_post('/webhook/cryptocloud', cryptocloud_webhook_handler)
+
+        # Add test endpoint for CryptoCloud webhook
+        async def test_cryptocloud_webhook(request):
+            return web.json_response({
+                "status": "ok",
+                "message": "CryptoCloud webhook endpoint is active"
+            })
+
+        app.router.add_get('/webhook/cryptocloud/test', test_cryptocloud_webhook)
+
+        # Mount FastAPI internal app using the original method
+        async def fastapi_handler(request):
+            # Convert aiohttp request to ASGI scope
+            scope = {
+                "type": "http",
+                "method": request.method,
+                "path": request.path_qs,
+                "headers": [[k.encode(), v.encode()] for k, v in request.headers.items()],
+                "query_string": request.query_string.encode(),
+            }
+
+            # Create receive callable
+            async def receive():
+                body = await request.read()
+                return {
+                    "type": "http.request",
+                    "body": body,
+                    "more_body": False,
+                }
+
+            # Create send callable
+            responses = []
+
+            async def send(message):
+                responses.append(message)
+
+            # Call FastAPI app
+            await internal_app(scope, receive, send)
+
+            # Convert response
+            status = 200
+            headers = {}
+            body = b""
+
+            for response in responses:
+                if response["type"] == "http.response.start":
+                    status = response["status"]
+                    # Convert ASGI headers (list of byte tuples) to dict of strings
+                    asgi_headers = response.get("headers", [])
+                    headers = {
+                        key.decode() if isinstance(key, bytes) else key:
+                            value.decode() if isinstance(value, bytes) else value
+                        for key, value in asgi_headers
+                    }
+                elif response["type"] == "http.response.body":
+                    body = response.get("body", b"")
+
+            return web.Response(body=body, status=status, headers=headers)
+
+        # Add internal API routes
+        app.router.add_route("POST", "/internal/{path:.*}", fastapi_handler)
+        app.router.add_route("GET", "/internal/{path:.*}", fastapi_handler)
+
+        # Setup application
         setup_application(app, dp, bot=bot)
 
-        logger.info("Starting webhook server...")
+        # Use the async version:
         runner = web.AppRunner(app)
         await runner.setup()
-        site = web.TCPSite(runner, host="0.0.0.0", port=8001)
+        site = web.TCPSite(runner, '0.0.0.0', 8001)
         await site.start()
 
-        logger.info("Webhook server started on port 8001")
-
-        # Keep the server running
-        try:
-            await asyncio.Future()  # Run forever
-        except KeyboardInterrupt:
-            logger.info("Received keyboard interrupt, shutting down...")
-        finally:
-            await runner.cleanup()
+        # Keep the application running
+        while True:
+            await asyncio.sleep(3600)  # Sleep for an hour
     else:
-        # Polling mode
-        logger.info("Starting bot in polling mode...")
-        await on_startup()
+        # For polling mode, run internal API in a separate task
+        async def run_internal_api():
+            config = uvicorn.Config(
+                internal_app,
+                host="0.0.0.0",
+                port=8001,
+                log_level="info"
+            )
+            server = uvicorn.Server(config)
+            await server.serve()
+
+        # Start internal API in background
+        internal_task = asyncio.create_task(run_internal_api())
+
+        # Start polling
         try:
             await dp.start_polling(bot)
         finally:
-            await on_shutdown()
+            internal_task.cancel()
 
 
 if __name__ == "__main__":
