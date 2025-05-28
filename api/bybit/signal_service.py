@@ -37,6 +37,107 @@ class BybitSignalService:
         asyncio.set_event_loop(self.loop)
         self.loop.run_forever()
 
+    def _initialize_active_signals(self):
+        """Initialize active_signals with existing open positions from database and Bybit."""
+        try:
+            logger.info("Initializing active signals from database and Bybit...")
+
+            with SessionLocal() as db:
+                # Get all open signals from database
+                open_signals = crud.get_open_signals(db)
+                logger.info(f"Found {len(open_signals)} open signals in database")
+
+                # Get current positions from Bybit for all categories
+                current_bybit_positions = {}
+
+                for category in self.tracker.tracked_categories:
+                    try:
+                        response = self.client.get_positions(category=category, settle_coin="USDT")
+                        if response.get("retCode") == 0:
+                            positions = response.get("result", {}).get("list", [])
+
+                            for position in positions:
+                                symbol = position.get("symbol")
+                                side = position.get("side")
+                                size = Decimal(position.get("size", "0"))
+
+                                # Only track non-zero positions
+                                if size > 0:
+                                    position_key = f"{category}_{symbol}_{side}"
+                                    current_bybit_positions[position_key] = {
+                                        "symbol": symbol,
+                                        "side": side,
+                                        "size": size,
+                                        "category": category,
+                                        "position_data": position
+                                    }
+                        else:
+                            logger.error(f"Error fetching positions for {category}: {response.get('retMsg')}")
+                    except Exception as e:
+                        logger.error(f"Error fetching positions for {category}: {e}")
+
+                logger.info(f"Found {len(current_bybit_positions)} active positions on Bybit")
+
+                # Match database signals with Bybit positions
+                matched_count = 0
+                for signal in open_signals:
+                    try:
+                        # Convert signal data to position key format
+                        category = signal.category.value.lower()
+                        symbol = signal.symbol
+                        side = signal.signal_type.value.upper()  # BUY or SELL
+
+                        position_key = f"{category}_{symbol}_{side}"
+
+                        # Check if this signal matches a current Bybit position
+                        if position_key in current_bybit_positions:
+                            self.active_signals[position_key] = signal.id
+                            matched_count += 1
+                            logger.debug(f"Matched signal {signal.signal_number} with position {position_key}")
+
+                            # Update tracker's tracked positions with current state
+                            bybit_position = current_bybit_positions[position_key]["position_data"]
+                            self.tracker.tracked_positions[position_key] = {
+                                "symbol": symbol,
+                                "side": side,
+                                "size": Decimal(bybit_position.get("size", "0")),
+                                "leverage": bybit_position.get("leverage", "1"),
+                                "avg_price": Decimal(bybit_position.get("avgPrice", "0")),
+                                "mark_price": Decimal(bybit_position.get("markPrice", "0")),
+                                "unrealized_pnl": Decimal(bybit_position.get("unrealisedPnl", "0")),
+                                "percentage": Decimal(bybit_position.get("unrealisedPnlPc", "0")) * 100,
+                                "category": category,
+                                "last_update": datetime.now().timestamp()
+                            }
+                        else:
+                            # Signal exists in database but no corresponding position on Bybit
+                            # This could mean the position was closed outside our tracking
+                            logger.warning(
+                                f"Signal {signal.signal_number} ({position_key}) exists in DB but not on Bybit - position may have been closed externally")
+
+                    except Exception as e:
+                        logger.error(f"Error processing signal {signal.id}: {e}")
+
+                logger.info(f"Successfully matched {matched_count} database signals with Bybit positions")
+
+                # Check for Bybit positions that don't have corresponding database signals
+                untracked_positions = []
+                for position_key, position_info in current_bybit_positions.items():
+                    if position_key not in self.active_signals:
+                        untracked_positions.append(position_key)
+
+                if untracked_positions:
+                    logger.warning(f"Found {len(untracked_positions)} Bybit positions without database signals:")
+                    for pos_key in untracked_positions:
+                        logger.warning(f"  - {pos_key}")
+                    logger.warning(
+                        "These positions were likely opened before the service started or outside our tracking")
+
+                logger.info(f"Active signals initialization complete. Tracking {len(self.active_signals)} positions.")
+
+        except Exception as e:
+            logger.error(f"Error initializing active signals: {e}", exc_info=True)
+
     def start(self, poll_interval: int = 5):
         """Start the signal service."""
         logger.info("Starting Bybit signal service...")
@@ -44,6 +145,9 @@ class BybitSignalService:
         # Start the event loop in a background thread
         self.thread = threading.Thread(target=self._start_background_loop, daemon=True)
         self.thread.start()
+
+        # Initialize active signals from existing data
+        self._initialize_active_signals()
 
         # Start position tracking
         self.tracker.start_tracking(poll_interval)
@@ -94,6 +198,14 @@ class BybitSignalService:
 
     def _handle_position_open(self, db: Session, signal_data: Dict[str, Any]):
         """Handle new position opening."""
+        position_key = f"{signal_data['category']}_{signal_data['symbol']}_{signal_data['side']}"
+
+        # Check if we're already tracking this position
+        if position_key in self.active_signals:
+            logger.warning(
+                f"Position {position_key} is already being tracked as signal {self.active_signals[position_key]}")
+            return
+
         # Create new signal
         signal_create = schemas.SignalCreate(
             symbol=signal_data["symbol"],
@@ -109,7 +221,6 @@ class BybitSignalService:
         signal = crud.create_signal(db, signal_create)
 
         # Store reference for tracking
-        position_key = f"{signal_data['category']}_{signal_data['symbol']}_{signal_data['side']}"
         self.active_signals[position_key] = signal.id
 
         # Send signal to users - use the event loop to run the async task
@@ -324,3 +435,12 @@ class BybitSignalService:
                     await send_signal_to_users(signal.id, user_ids)
                 except Exception as e:
                     logger.error(f"Error notifying users of position increase: {e}")
+
+    def get_active_signals_status(self) -> Dict[str, Any]:
+        """Get current status of active signals for debugging/monitoring."""
+        return {
+            "active_signals_count": len(self.active_signals),
+            "tracked_positions_count": len(self.tracker.tracked_positions),
+            "active_signals": dict(self.active_signals),
+            "service_running": self.tracker.is_running if hasattr(self.tracker, 'is_running') else "unknown"
+        }
