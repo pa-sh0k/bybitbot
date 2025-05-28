@@ -9,6 +9,15 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
+# Global bot instance
+bot_instance = None
+
+
+def set_bot_instance_for_webhook(bot):
+    """Set the bot instance for webhook to use."""
+    global bot_instance
+    bot_instance = bot
+
 
 class CryptoCloudWebhook(BaseModel):
     status: str
@@ -17,6 +26,7 @@ class CryptoCloudWebhook(BaseModel):
     currency: str
     order_id: Optional[str] = None
     token: Optional[str] = None  # JWT token for verification
+    invoice_info: Optional[Dict[str, Any]] = None  # Additional invoice information
 
 
 async def handle_cryptocloud_webhook(request: Request) -> Dict[str, Any]:
@@ -40,7 +50,7 @@ async def handle_cryptocloud_webhook(request: Request) -> Dict[str, Any]:
         webhook_data = CryptoCloudWebhook(**payload)
 
         # Only process successful payments
-        if webhook_data.status.lower() != "success":
+        if webhook_data.status.lower() not in ["success", "paid"]:
             logger.info(f"Ignoring webhook with status: {webhook_data.status}")
             return {"message": "Webhook received", "processed": False}
 
@@ -117,20 +127,16 @@ async def send_payment_notification(user_telegram_id: int, amount: float, invoic
             f"Средства поступили на ваш баланс."
         )
 
-        # Send notification via bot API
-        async with aiohttp.ClientSession() as session:
-            notification_payload = {
-                "telegram_id": user_telegram_id,
-                "message": notification_text
-            }
-            async with session.post(
-                    f"{settings.API_URL}/api/bot/send_message",
-                    json=notification_payload
-            ) as response:
-                if response.status == 200:
-                    logger.info(f"Payment notification sent to user {user_telegram_id}")
-                else:
-                    logger.error(f"Failed to send notification: {await response.text()}")
+        # Send notification directly via bot instance
+        if bot_instance:
+            await bot_instance.send_message(
+                user_telegram_id,
+                notification_text,
+                parse_mode="HTML"
+            )
+            logger.info(f"Payment notification sent to user {user_telegram_id}")
+        else:
+            logger.error("Bot instance not available for sending notification")
 
     except Exception as e:
         logger.error(f"Error sending payment notification: {e}")

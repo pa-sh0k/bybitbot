@@ -91,7 +91,7 @@ class CryptoCloudClient:
         Returns:
             Dictionary with invoice information
         """
-        url = f"{self.base_url}/v2/invoice/info"
+        url = f"{self.base_url}/v2/invoice/merchant/info"
 
         headers = {
             "Authorization": f"Token {self.api_key}",

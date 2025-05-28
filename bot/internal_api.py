@@ -209,7 +209,7 @@ async def send_daily_summary(request: SendDailySummaryRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@internal_app.post("/internal/send_message")
+@internal_app.post("/send_message")
 async def send_message(request: SendMessageRequest):
     """Send a custom message to a specific user."""
     try:
