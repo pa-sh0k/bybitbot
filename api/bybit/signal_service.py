@@ -382,9 +382,9 @@ class BybitSignalService:
 
             if old_size == 0:
                 return 0.0
-
+            leverage = int(signal_data.get("leverage", "1x").replace("x", ''))
             # Simple percentage calculation - this may need adjustment based on actual data
-            return float(realized_pnl / old_size * 100)
+            return float(leverage * realized_pnl / old_size * 100)
         except:
             return 0.0
 
