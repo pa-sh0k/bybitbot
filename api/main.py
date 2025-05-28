@@ -320,6 +320,12 @@ def get_active_users(db: Session = Depends(get_db)):
     return [{"id": user.id, "telegram_id": user.telegram_id} for user in users]
 
 
+@app.get("/api/users/all")
+def get_active_users(db: Session = Depends(get_db)):
+    """Get all active users for broadcasting"""
+    users = db.query(models.User).filter().all()
+    return [{"id": user.id, "telegram_id": user.telegram_id} for user in users]
+
 @app.get("/api/daily_summary/{date_str}")
 def get_daily_summary(date_str: str, db: Session = Depends(get_db)):
     # Calculate today's date in UTC+3

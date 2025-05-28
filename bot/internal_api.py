@@ -13,7 +13,7 @@ from handlers.signals import (
     format_increase_signal
 )
 from cryptocloud_webhook import handle_cryptocloud_webhook
-
+import sender
 logger = logging.getLogger(__name__)
 
 
@@ -214,9 +214,9 @@ async def send_message(request: SendMessageRequest):
     """Send a custom message to a specific user."""
     try:
         if bot_instance:
-            await bot_instance.send_message(
-                request.telegram_id,
-                request.message,
+            await sender.send_message(bot_instance,
+                chat_id=request.telegram_id,
+                text=request.message,
                 parse_mode="HTML"
             )
             return {"status": "success", "message": "Message sent"}

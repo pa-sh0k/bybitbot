@@ -41,6 +41,20 @@ services:
     restart: always
 #    ports:
 #      - "8000:8000"  # Optional: expose for debugging
+  daily-stats:
+    build: ./daily-stats
+    depends_on:
+      - api
+      - bot
+    environment:
+      - API_URL=http://api:8000
+      - BOT_SERVICE_URL=http://bot:8001
+      - TELEGRAM_RATE_LIMIT=0.1
+      - MAX_RETRIES=3
+      - RETRY_DELAY=5
+    volumes:
+      - ./logs:/var/log
+    restart: always
 
   bot:
     build: ./bot
